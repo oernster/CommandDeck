@@ -1,0 +1,46 @@
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+skip-string-normalization = false
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+exclude = [
+".git",
+"**pycache**",
+"venv",
+"build",
+"dist"
+]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-v --cov=backend/app --cov-report=term-missing --cov-fail-under=100"
+testpaths = [
+"backend/tests"
+]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+branch = true
+source = ["backend/app"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 100
+skip_empty = true
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_return_any = true
+warn_unused_ignores = true

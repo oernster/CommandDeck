@@ -24,10 +24,10 @@ Commands represent intent.
 
 Each command belongs to a category and progresses through a simple state model:
 
-- 🔴 Blocked
-- 🟠 In Progress
-- 🟢 Complete
-- ⚪ Not Started
+- Blocked
+- In Progress
+- Complete
+- Not Started
 
 Commands are not plans.
 They are active units of execution.
@@ -95,3 +95,106 @@ It exists to answer:
 A simple SQLite database is used for persistence.
 
 The system is intentionally minimal.
+
+---
+
+## Development: Run Locally
+
+Command Deck v1 is local-only and intended to run on:
+
+* backend: `http://127.0.0.1:8001`
+* frontend (dev server): `http://127.0.0.1:5173`
+
+### 1) Backend (FastAPI)
+
+From the repo root:
+
+```powershell
+python -m venv venv
+./venv/Scripts/Activate.ps1
+python -m pip install -r requirements.txt
+
+# Run API on http://127.0.0.1:8001
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
+
+Health check:
+
+* `GET http://127.0.0.1:8001/api/health`
+
+### 2) Frontend (Vite + React)
+
+In a separate terminal:
+
+```powershell
+cd frontend
+npm install
+
+# Run UI on http://127.0.0.1:5173
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+The frontend dev server proxies `/api/*` to the backend.
+
+### 2b) Frontend production build served by the backend
+
+To run the UI from the backend on a single address (`http://127.0.0.1:8001/`):
+
+```powershell
+cd frontend
+npm install
+npm run build
+
+# In a separate terminal
+cd ..
+./venv/Scripts/Activate.ps1
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
+
+Then open:
+
+* `http://127.0.0.1:8001/`
+
+### 3) Tests (backend)
+
+Backend tests are full-stack (API → services → repositories → real SQLite) and must run at 100% coverage:
+
+```powershell
+./venv/Scripts/Activate.ps1
+pytest -v --cov
+```
+
+### 4) Quality gates (backend)
+
+Run from repo root:
+
+```powershell
+./venv/Scripts/Activate.ps1
+python -m black --check backend
+python -m flake8 backend
+python -m mypy backend/app
+python -m pytest -q backend --cov=backend/app --cov-fail-under=100
+```
+
+---
+
+## Tray runtime (Windows-only)
+
+Command Deck v1 includes a minimal system tray launcher.
+
+It:
+
+* starts the backend server in the background
+* provides tray menu actions:
+  * **Open Command Deck** (opens default browser to `http://127.0.0.1:8001/`)
+  * **Quit** (stops backend + exits tray)
+
+Run it from the repo root:
+
+```powershell
+./venv/Scripts/Activate.ps1
+cd backend
+python -m app.tray
+```
