@@ -61,18 +61,18 @@ class SessionStartRequest(BaseModel):
 class SessionResponse(BaseModel):
     id: int
     category: str
-    start_time: str
-    end_time: str | None
+    started_at: str
+    ended_at: str | None
 
     @classmethod
     def from_model(cls, session: Session) -> "SessionResponse":
         return cls(
             id=session.id,
             category=session.category.value,
-            start_time=epoch_seconds_to_iso8601_z(session.start_time),
-            end_time=(
-                epoch_seconds_to_iso8601_z(session.end_time)
-                if session.end_time is not None
+            started_at=epoch_seconds_to_iso8601_z(session.started_at),
+            ended_at=(
+                epoch_seconds_to_iso8601_z(session.ended_at)
+                if session.ended_at is not None
                 else None
             ),
         )

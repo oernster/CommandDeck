@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from collections.abc import Generator
+
 from fastapi.testclient import TestClient
 
 # Ensure `backend/` is on sys.path so `import app.*` works.
@@ -15,10 +17,11 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.database import get_db, init_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.core import config  # noqa: E402
 
 
 @pytest.fixture(scope="function")
-def test_db_path() -> str:
+def test_db_path() -> Generator[str, None, None]:
     """Create a fresh temporary database file per test."""
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
@@ -30,7 +33,7 @@ def test_db_path() -> str:
 
 
 @pytest.fixture(scope="function")
-def db_connection(test_db_path: str) -> sqlite3.Connection:
+def db_connection(test_db_path: str) -> Generator[sqlite3.Connection, None, None]:
     """Provide a real SQLite connection."""
     # TestClient may execute app code in a different thread.
     conn = sqlite3.connect(test_db_path, check_same_thread=False)
@@ -46,8 +49,15 @@ def db_connection(test_db_path: str) -> sqlite3.Connection:
 
 
 @pytest.fixture(scope="function")
-def client(db_connection: sqlite3.Connection) -> TestClient:
+def client(
+    db_connection: sqlite3.Connection, test_db_path: str
+) -> Generator[TestClient, None, None]:
     """FastAPI test client using real DB (no mocks)."""
+
+    # Ensure app lifespan startup uses the test DB path, so a developer's local
+    # `command_deck.db` (with any schema version) can't break the test suite.
+    original_settings = config.SETTINGS
+    config.SETTINGS = config.Settings(sqlite_path=test_db_path)
 
     def _get_test_db():
         yield db_connection
@@ -58,3 +68,4 @@ def client(db_connection: sqlite3.Connection) -> TestClient:
             yield c
     finally:
         app.dependency_overrides.clear()
+        config.SETTINGS = original_settings

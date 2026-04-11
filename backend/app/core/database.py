@@ -45,15 +45,15 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS sessions (
           id INTEGER PRIMARY KEY,
           category TEXT NOT NULL,
-          start_time INTEGER NOT NULL,
-          end_time INTEGER
+          started_at INTEGER NOT NULL,
+          ended_at INTEGER
         );
         """.strip())
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_category ON sessions(category);"
     )
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_sessions_end_time ON sessions(end_time);"
+        "CREATE INDEX IF NOT EXISTS idx_sessions_ended_at ON sessions(ended_at);"
     )
 
     conn.commit()

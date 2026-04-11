@@ -25,8 +25,8 @@ def test_start_and_stop_session_flow(client) -> None:
     body = started.json()
     assert body["id"] == 1
     assert body["category"] == "Build"
-    assert body["end_time"] is None
-    assert body["start_time"].endswith("Z")
+    assert body["ended_at"] is None
+    assert body["started_at"].endswith("Z")
 
     active = client.get("/api/sessions/active")
     assert active.status_code == 200
@@ -36,23 +36,23 @@ def test_start_and_stop_session_flow(client) -> None:
     assert stopped.status_code == 200
     stopped_body = stopped.json()
     assert stopped_body["id"] == 1
-    assert stopped_body["end_time"].endswith("Z")
+    assert stopped_body["ended_at"].endswith("Z")
 
 
 def test_start_new_session_ends_previous(client) -> None:
     s1 = client.post("/api/sessions/start", json={"category": "Design"}).json()
-    assert s1["end_time"] is None
+    assert s1["ended_at"] is None
 
     s2 = client.post("/api/sessions/start", json={"category": "Review"}).json()
     assert s2["id"] == 2
     assert s2["category"] == "Review"
-    assert s2["end_time"] is None
+    assert s2["ended_at"] is None
 
     # Previous session should now be ended.
     all_sessions = client.get("/api/sessions").json()
     by_id = {s["id"]: s for s in all_sessions}
-    assert by_id[1]["end_time"] is not None
-    assert by_id[2]["end_time"] is None
+    assert by_id[1]["ended_at"] is not None
+    assert by_id[2]["ended_at"] is None
 
 
 def test_list_sessions_filters(client) -> None:
@@ -66,11 +66,11 @@ def test_list_sessions_filters(client) -> None:
 
     active_only = client.get("/api/sessions?active=true")
     assert active_only.status_code == 200
-    assert all(s["end_time"] is None for s in active_only.json())
+    assert all(s["ended_at"] is None for s in active_only.json())
 
     inactive_only = client.get("/api/sessions?active=false")
     assert inactive_only.status_code == 200
-    assert all(s["end_time"] is not None for s in inactive_only.json())
+    assert all(s["ended_at"] is not None for s in inactive_only.json())
 
 
 def test_list_sessions_invalid_category_query(client) -> None:

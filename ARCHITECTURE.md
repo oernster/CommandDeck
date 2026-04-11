@@ -53,6 +53,7 @@ Time handling:
 
 - Stored in DB as UTC epoch seconds (integers).
 - Rendered at the API boundary as ISO 8601 `Z` strings via helpers in [`backend/app/domain/models.py`](backend/app/domain/models.py:1).
+- Session timestamps are the source of truth: each session stores `started_at` and `ended_at` (`ended_at` is null while active). Durations are always derived from these timestamps; any live timer in the UI is a presentation concern.
 
 ## 2) Frontend architecture
 

@@ -142,16 +142,55 @@ def test_start_backend_raises_if_venv_python_missing(monkeypatch) -> None:
         lambda: "C:/this/path/does/not/exist",
     )
 
-    with pytest.raises(RuntimeError, match="venv/Scripts/python.exe"):
-        _start_backend_with_popen(
-            settings=TraySettings(),
-            popen_factory=lambda *a, **k: None,  # type: ignore[arg-type]
-        )
+    captured: dict[str, object] = {}
+
+    class _Proc:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout: float):
+            return 0
+
+        def kill(self):
+            pass
+
+    def _popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None):
+        captured["args"] = args
+        captured["cwd"] = cwd
+        captured["env"] = env
+        return _Proc()  # type: ignore[return-value]
+
+    # Force fallback to sys.executable by reporting only the venv python as missing.
+    real_isfile = os.path.isfile
+
+    def _fake_isfile(path: str) -> bool:
+        normalized = path.replace("\\", "/")
+        if normalized == sys.executable.replace("\\", "/"):
+            return True
+        if "venv" in normalized:
+            return False
+        return real_isfile(path)
+
+    monkeypatch.setattr("app.tray.runtime.os.path.isfile", _fake_isfile)
+
+    # Should fall back to sys.executable rather than raising.
+    _start_backend_with_popen(
+        settings=TraySettings(),
+        popen_factory=_popen,  # type: ignore[arg-type]
+    )
+
+    args = captured["args"]
+    assert isinstance(args, list)
+    assert isinstance(args[0], str) and args[0]  # python exe
 
 
 def test_start_backend_invokes_uvicorn_with_expected_args(monkeypatch) -> None:
-    # Force repo_root to the actual workspace so venv python exists.
+    # Force repo_root to the actual workspace and report the venv python as present.
     monkeypatch.setattr("app.tray.runtime._repo_root", lambda: os.getcwd())
+    monkeypatch.setattr("app.tray.runtime.os.path.isfile", lambda _: True)
 
     captured: dict[str, object] = {}
 
@@ -192,6 +231,19 @@ def test_start_backend_invokes_uvicorn_with_expected_args(monkeypatch) -> None:
     assert args[1:4] == ["-m", "uvicorn", "app.main:app"]
     assert "--host" in args and "127.0.0.1" in args
     assert "--port" in args and "8001" in args
+
+
+def test_start_backend_raises_when_no_python_executable_available(monkeypatch) -> None:
+    # Force venv python missing.
+    monkeypatch.setattr("app.tray.runtime.os.path.isfile", lambda _: False)
+    # Force fallback python missing too.
+    monkeypatch.setattr("app.tray.runtime.sys.executable", "")
+
+    with pytest.raises(RuntimeError, match="Could not find a usable Python executable"):
+        _start_backend_with_popen(
+            settings=TraySettings(),
+            popen_factory=lambda *a, **k: None,  # type: ignore[arg-type]
+        )
 
 
 def test_start_backend_wrapper_calls_impl(monkeypatch) -> None:

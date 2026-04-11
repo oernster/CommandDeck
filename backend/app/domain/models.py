@@ -39,5 +39,5 @@ class Outcome:
 class Session:
     id: int
     category: Category
-    start_time: int  # UTC epoch seconds
-    end_time: int | None  # UTC epoch seconds
+    started_at: int  # UTC epoch seconds
+    ended_at: int | None  # UTC epoch seconds

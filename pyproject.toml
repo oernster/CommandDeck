@@ -16,7 +16,9 @@ exclude = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-v --cov=backend/app --cov-report=term-missing --cov-fail-under=100"
+# `--cov` expects importable module paths. In this repo the package root is
+# `backend/app` on disk but imported as `app.*`.
+addopts = "-v --cov=app --cov-report=term-missing --cov-fail-under=100"
 testpaths = [
 "backend/tests"
 ]

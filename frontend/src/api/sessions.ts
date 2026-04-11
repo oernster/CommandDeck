@@ -7,8 +7,8 @@ export type SessionActive =
   | {
       id: number;
       category: Category;
-      start_time: string;
-      end_time: string | null;
+      started_at: string;
+      ended_at: string | null;
     };
 
 export async function getActiveSession(): Promise<SessionActive> {

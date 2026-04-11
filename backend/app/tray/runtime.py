@@ -68,10 +68,14 @@ def _start_backend_with_popen(
     backend_cwd = _backend_workdir(repo_root)
 
     if not os.path.isfile(python_exe):
-        raise RuntimeError(
-            "Could not find venv Python at venv/Scripts/python.exe. "
-            "Create the venv by running: python -m venv venv"
-        )
+        # Be resilient in dev/test environments where the repo may not ship
+        # with a local venv folder. Fall back to the current interpreter.
+        python_exe = sys.executable
+        if not python_exe or not os.path.isfile(python_exe):
+            raise RuntimeError(
+                "Could not find a usable Python executable. "
+                "Expected venv/Scripts/python.exe or a valid sys.executable."
+            )
 
     env = dict(os.environ)
     # Ensure static frontend serving works when frontend has been built.

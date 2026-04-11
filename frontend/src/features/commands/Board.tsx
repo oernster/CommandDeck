@@ -148,7 +148,7 @@ export function Board() {
 
   const sessionTimerText = useMemo(() => {
     if (activeCategory === null) return null;
-    const startIso = (activeSession as Exclude<SessionActive, { active: false }>).start_time;
+    const startIso = (activeSession as Exclude<SessionActive, { active: false }>).started_at;
     const startMs = Date.parse(startIso);
     if (Number.isNaN(startMs)) return null;
     return formatDuration((nowMs - startMs) / 1000);

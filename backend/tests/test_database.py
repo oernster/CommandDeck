@@ -77,7 +77,7 @@ def test_session_repository_defensive_category_corruption_raises(tmp_path) -> No
     init_db(conn)
 
     conn.execute(
-        "INSERT INTO sessions (category, start_time, end_time) VALUES (?, ?, NULL)",
+        "INSERT INTO sessions (category, started_at, ended_at) VALUES (?, ?, NULL)",
         ("NotACategory", 1),
     )
     conn.commit()
@@ -108,7 +108,7 @@ def test_session_repository_start_rolls_back_on_insert_failure(tmp_path) -> None
 
     # Seed an active session.
     conn.execute(
-        "INSERT INTO sessions (category, start_time, end_time) VALUES (?, ?, NULL)",
+        "INSERT INTO sessions (category, started_at, ended_at) VALUES (?, ?, NULL)",
         ("Design", 1),
     )
     conn.commit()
@@ -132,11 +132,11 @@ def test_session_repository_start_rolls_back_on_insert_failure(tmp_path) -> None
 
     # Rollback should have kept the original session active.
     row = conn.execute(
-        "SELECT category, start_time, end_time FROM sessions WHERE id = 1"
+        "SELECT category, started_at, ended_at FROM sessions WHERE id = 1"
     ).fetchone()
     assert row["category"] == "Design"
-    assert row["start_time"] == 1
-    assert row["end_time"] is None
+    assert row["started_at"] == 1
+    assert row["ended_at"] is None
 
     conn.close()
 
