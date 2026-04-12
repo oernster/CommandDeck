@@ -53,6 +53,16 @@
   cursor: pointer;
 }
 
+.disabledRed {
+  border-color: rgba(255, 92, 92, 0.95) !important;
+  box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.22) inset;
+}
+
+.disabledRed:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
 .title {
   margin: 0;
   font-size: 22px;
@@ -276,11 +286,13 @@
 }
 
 .statusDot {
-  width: 10px;
-  height: 10px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   flex: 0 0 auto;
+  /* Center within the title row even when the title wraps. */
+  align-self: center;
 }
 
 .statusNotStarted {

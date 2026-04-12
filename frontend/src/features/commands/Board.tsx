@@ -305,6 +305,8 @@ export function Board() {
       ? null
       : (activeSession as Exclude<SessionActive, { active: false }>).category;
 
+  const stopDisabled = activeCategory === null;
+
   function formatDuration(seconds: number): string {
     const s = Math.max(0, Math.floor(seconds));
     const hh = Math.floor(s / 3600)
@@ -358,15 +360,15 @@ export function Board() {
             {activeCategory !== null && sessionTimerText ? (
               <span className={styles.sessionTimer}>{sessionTimerText}</span>
             ) : null}
-            {activeCategory !== null ? (
-              <button
-                type="button"
-                className={styles.tinyButton}
-                onClick={() => void onStopSession()}
-              >
-                Stop
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className={`${styles.tinyButton} ${stopDisabled ? styles.disabledRed : ""}`}
+              disabled={stopDisabled}
+              title={stopDisabled ? "No active session to stop" : "Stop active session"}
+              onClick={() => void onStopSession()}
+            >
+              Stop
+            </button>
           </div>
         </div>
         <div className={styles.headerRight}>
@@ -386,13 +388,26 @@ export function Board() {
             <div className={styles.columnHeader}>
               <h2 className={styles.columnTitle}>{category}</h2>
               <div className={styles.columnHeaderActions}>
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  onClick={() => void onStartSession(category)}
-                >
-                  Start
-                </button>
+                {(() => {
+                  const startDisabled = activeCategory === category;
+                  const startTitle = startDisabled
+                    ? "This category already has an active timer"
+                    : "Start a session timer for this category";
+
+                  return (
+                    <button
+                      type="button"
+                      className={`${styles.secondaryButton} ${
+                        startDisabled ? styles.disabledRed : ""
+                      }`}
+                      disabled={startDisabled}
+                      title={startTitle}
+                      onClick={() => void onStartSession(category)}
+                    >
+                      Start
+                    </button>
+                  );
+                })()}
                 <button
                   type="button"
                   className={styles.secondaryButton}
