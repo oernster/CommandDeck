@@ -63,6 +63,13 @@ LICENSE_DIVIDER = (
 RUNTIME_EXE_NAME = "CommandDeck.exe"
 INSTALLER_EXE_NAME = "CommandDeckInstaller.exe"
 
+# User data files stored alongside the runtime EXE.
+#
+# IMPORTANT:
+# - These must survive Repair, and must survive Uninstall by default.
+# - When SQLite is in WAL mode there may also be `-wal` / `-shm` sidecar files.
+SQLITE_DB_FILENAME = "command_deck.db"
+
 WINDOWS_UNINSTALL_KEY = (
     r"Software\Microsoft\Windows\CurrentVersion\Uninstall\CommandDeck"
 )
@@ -495,6 +502,19 @@ class InstallerWindow(QMainWindow):
             self,
         )
 
+        # Uninstall behavior: by default we *keep* the database so a reinstall
+        # or repair does not wipe user data. Users can explicitly opt in to a
+        # full wipe.
+        self.wipe_data_checkbox = QCheckBox(
+            "On uninstall, also delete my database (wipe user data)",
+            self,
+        )
+        self.wipe_data_checkbox.setChecked(False)
+        self.wipe_data_checkbox.setToolTip(
+            "If checked, Uninstall will also delete the local SQLite database\n"
+            f"({SQLITE_DB_FILENAME} and any -wal/-shm sidecar files)."
+        )
+
         if sys.platform.startswith("win"):
             self.desktop_shortcut_checkbox.setChecked(True)
             self.start_menu_checkbox.setChecked(True)
@@ -513,6 +533,8 @@ class InstallerWindow(QMainWindow):
         options_layout.addWidget(self.desktop_shortcut_checkbox)
         options_layout.addWidget(self.start_menu_checkbox)
         options_layout.addWidget(self.autostart_checkbox)
+        options_layout.addSpacing(6)
+        options_layout.addWidget(self.wipe_data_checkbox)
         layout.addLayout(options_layout)
 
         self.progress_bar = QProgressBar(self)
@@ -558,6 +580,8 @@ class InstallerWindow(QMainWindow):
         has_installed = self.installed_version is not None and self.install_dir.exists()
         self.install_button.setEnabled(True)
         self.repair_button.setEnabled(bool(has_installed))
+        self.uninstall_button.setEnabled(bool(has_installed))
+        self.wipe_data_checkbox.setEnabled(bool(has_installed))
 
     # ------------------------------------------------------------------ theme
 
@@ -774,7 +798,8 @@ class InstallerWindow(QMainWindow):
     def on_uninstall_clicked(self) -> None:
         self.choose_dir_action.setEnabled(False)
         try:
-            self._perform_uninstall(confirm=True)
+            wipe_data = bool(self.wipe_data_checkbox.isChecked())
+            self._perform_uninstall(confirm=True, wipe_data=wipe_data)
         except Exception as exc:
             self._finish_progress("Uninstall failed")
             self._show_error(
@@ -885,9 +910,11 @@ class InstallerWindow(QMainWindow):
                 except Exception as exc:
                     self._log(f"Failed to copy {s} -> {d}: {exc}")
 
-    def _delete_tree(self, root: Path) -> None:
+    def _delete_tree(self, root: Path, *, preserve_paths: set[Path] | None = None) -> None:
         if not root.exists():
             return
+
+        preserve = {p.resolve() for p in (preserve_paths or set()) if isinstance(p, Path)}
 
         for dirpath, dirnames, filenames in os.walk(root, topdown=False):
             base = Path(dirpath)
@@ -895,9 +922,18 @@ class InstallerWindow(QMainWindow):
             for name in filenames:
                 p = base / name
                 try:
+                    # Preserve specific user-data files (database, WAL/SHM, etc.).
+                    try:
+                        resolved = p.resolve()
+                    except OSError:
+                        resolved = p
+
+                    if preserve and resolved in preserve:
+                        continue
+
                     if p.exists():
                         p.unlink()
-                    self._update_progress()
+                        self._update_progress()
                 except Exception as exc:
                     self._log(f"Failed to delete file {p}: {exc}")
 
@@ -910,12 +946,28 @@ class InstallerWindow(QMainWindow):
                     self._log(f"Failed to delete directory {d}: {exc}")
 
         try:
+            # If we intentionally preserved any paths, the root will likely not
+            # be empty. Do not log an expected failure.
+            if preserve:
+                return
+
             if root.exists():
                 root.rmdir()
         except Exception as exc:
             self._log(f"Failed to delete install root {root}: {exc}")
 
-    def _perform_uninstall(self, confirm: bool = True) -> None:
+    def _sqlite_related_paths(self, db_path: Path) -> set[Path]:
+        """Return the DB path plus common SQLite sidecar files.
+
+        SQLite uses `-wal`/`-shm` when in WAL mode.
+        """
+        return {
+            db_path,
+            Path(str(db_path) + "-wal"),
+            Path(str(db_path) + "-shm"),
+        }
+
+    def _perform_uninstall(self, confirm: bool = True, *, wipe_data: bool = False) -> None:
         self._log("Starting uninstall...")
         self._stop_running_tray()
 
@@ -934,17 +986,32 @@ class InstallerWindow(QMainWindow):
 
         installed_version = self.installed_version or "previously installed"
         if confirm:
+            if wipe_data:
+                data_note = (
+                    "\n\nUser data will be deleted: the local database will be removed."
+                )
+            else:
+                data_note = (
+                    "\n\nUser data will be kept: the local database will NOT be removed."
+                )
             if not self._confirm(
                 "Confirm uninstall",
                 (
                     f"Are you sure you want to remove {APP_NAME} version "
                     f"{installed_version} from:\n{self.install_dir}?"
+                    + data_note
                 ),
             ):
                 self._finish_progress("Uninstall cancelled")
                 return
 
-        self._delete_tree(self.install_dir)
+        preserve_paths: set[Path] | None = None
+        if not wipe_data:
+            preserve_paths = self._sqlite_related_paths(
+                self.install_dir / SQLITE_DB_FILENAME
+            )
+
+        self._delete_tree(self.install_dir, preserve_paths=preserve_paths)
 
         if sys.platform.startswith("win"):
             self._remove_windows_shortcuts()
@@ -958,7 +1025,14 @@ class InstallerWindow(QMainWindow):
         self._refresh_versions_and_buttons()
         self._show_info(
             "Uninstall complete",
-            f"{APP_NAME} version {installed_version} has been removed from:\n{self.install_dir}",
+            (
+                f"{APP_NAME} version {installed_version} has been removed from:\n{self.install_dir}"
+                + (
+                    "\n\nDatabase was deleted."
+                    if wipe_data
+                    else f"\n\nDatabase was kept at:\n{self.install_dir / SQLITE_DB_FILENAME}"
+                )
+            ),
         )
 
     # ------------------------------------------------------------------ Windows autostart

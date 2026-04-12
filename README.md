@@ -283,3 +283,17 @@ python buildguiinstaller.py
 Output:
 
 * `CommandDeckInstaller.exe`
+
+---
+
+## Database persistence (Windows installer)
+
+The application stores its SQLite database next to the installed runtime EXE:
+
+* `command_deck.db` (plus optional SQLite sidecars `command_deck.db-wal` and `command_deck.db-shm`)
+
+Installer behavior:
+
+* **Repair**: never touches the database.
+* **Uninstall**: preserves the database by default.
+  * To wipe user data, use the **"On uninstall, also delete my database"** checkbox.
