@@ -17,6 +17,7 @@ from app.api.sessions import router as sessions_router
 from app.core.lifecycle import init_database_file
 from app.core.static_files import frontend_dist_dir
 from app.domain.errors import NotFoundError, ValidationError
+from app.version import VERSION
 
 
 @asynccontextmanager
@@ -28,7 +29,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Command Deck", version="v1", lifespan=lifespan)
+    app = FastAPI(title="Command Deck", version=VERSION, lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def _request_validation_handler(

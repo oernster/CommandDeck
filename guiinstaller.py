@@ -1,0 +1,1301 @@
+#!/usr/bin/env python3
+r"""PySide6-based GUI installer for Command Deck.
+
+This is an intentional architectural/behavioural clone of the existing
+EDColonisationAsst installer, with Command Deck identifiers and payload
+expectations.
+
+Key characteristics preserved:
+- PySide6 GUI with dark/light theme toggle
+- Install / Repair / Uninstall workflow
+- Windows-friendly default install location under %LOCALAPPDATA%
+- HKCU Add/Remove Programs registration
+- Desktop + Start Menu shortcuts
+- Optional per-user autostart (HKCU\...\Run)
+- Progress bar driven by file operations and a hidden internal log
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Optional
+
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QAction, QColor, QFontMetrics, QIcon, QPalette, QPixmap
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QSplashScreen,
+    QStatusBar,
+    QTextEdit,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from guiinstallercss import DARK_QSS, LIGHT_QSS
+
+
+APP_NAME = "Command Deck"
+APP_ID = "CommandDeck"  # No spaces: used for paths/registry (ED installer pattern)
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_PAYLOAD_DIR = PROJECT_ROOT / "build_payload"
+
+RUNTIME_EXE_NAME = "CommandDeck.exe"
+INSTALLER_EXE_NAME = "CommandDeckInstaller.exe"
+
+WINDOWS_UNINSTALL_KEY = (
+    r"Software\Microsoft\Windows\CurrentVersion\Uninstall\CommandDeck"
+)
+
+WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+WINDOWS_RUN_VALUE_NAME = APP_ID
+
+
+def get_backend_version() -> str:
+    """Determine the installer version.
+
+    Single source of truth: backend/app/version.py.
+    """
+
+    def _parse_version_py(path: Path) -> Optional[str]:
+        if not path.exists():
+            return None
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:
+            return None
+        for line in text.splitlines():
+            s = line.strip()
+            if s.startswith("VERSION") and "=" in s:
+                _, rhs = s.split("=", 1)
+                raw = rhs.strip().strip('"').strip("'")
+                return raw or None
+        return None
+
+    candidates: list[Path] = []
+
+    # Packaged installer bundle: payload backend sources may be included and
+    # may have been renamed to *.py_.
+    try:
+        here = Path(__file__).resolve().parent
+        candidates.append(here / "payload" / "backend" / "app" / "version.py")
+        candidates.append(here / "payload" / "backend" / "app" / "version.py_")
+    except Exception:
+        pass
+
+    try:
+        exe_dir = Path(sys.argv[0]).resolve().parent
+        candidates.append(exe_dir / "payload" / "backend" / "app" / "version.py")
+        candidates.append(exe_dir / "payload" / "backend" / "app" / "version.py_")
+    except Exception:
+        pass
+
+    # Source/dev checkout.
+    candidates.append(PROJECT_ROOT / "backend" / "app" / "version.py")
+
+    seen: set[Path] = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        v = _parse_version_py(path)
+        if v:
+            return v
+
+    return "0.0.0"
+
+
+def get_default_install_dir() -> Path:
+    """Return a sensible default install directory based on OS."""
+    if sys.platform.startswith("win"):
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if not local_appdata:
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                base = Path(appdata).parent
+            else:
+                base = Path.home() / "AppData" / "Local"
+        else:
+            base = Path(local_appdata)
+        return base / APP_ID
+    elif sys.platform == "darwin":
+        return Path.home() / "Applications" / APP_ID
+    else:
+        return Path.home() / ".local" / "share" / APP_ID
+
+
+def get_payload_root() -> Optional[Path]:
+    """Determine where the installer payload lives."""
+    candidates: list[Path] = []
+    try:
+        candidates.append(Path(sys.argv[0]).resolve().parent / "payload")
+    except Exception:
+        pass
+
+    try:
+        candidates.append(Path(__file__).resolve().parent / "payload")
+    except Exception:
+        pass
+
+    for path in candidates:
+        if path.exists():
+            return path
+
+    payload_root = DEFAULT_PAYLOAD_DIR
+    if payload_root.exists():
+        try:
+            if any(payload_root.iterdir()):
+                return payload_root
+        except Exception:
+            pass
+
+    if PROJECT_ROOT.exists():
+        return PROJECT_ROOT
+
+    return None
+
+
+def _reflow_license_body(text: str, width: int = 75) -> str:
+    import textwrap
+
+    paragraphs = text.split("\n\n")
+    reflowed: list[str] = []
+
+    for para in paragraphs:
+        lines = [ln.rstrip() for ln in para.splitlines()]
+        if not any(lines):
+            reflowed.append("")
+            continue
+
+        if any(ln.startswith("    ") or ln.startswith("\t") for ln in lines):
+            reflowed.append("\n".join(lines))
+            continue
+
+        joined = " ".join(ln.strip() for ln in lines)
+        reflowed.append(textwrap.fill(joined, width=width))
+
+    return "\n\n".join(reflowed)
+
+
+def _read_text_file_with_fallback(
+    *,
+    label: str,
+    filename: str,
+    header: str,
+    url_fallback: str,
+) -> str:
+    candidate_paths: list[Path] = []
+    try:
+        candidate_paths.append(Path(__file__).resolve().parent / filename)
+    except Exception:
+        pass
+    candidate_paths.append(PROJECT_ROOT / filename)
+
+    for path in candidate_paths:
+        if not path.exists():
+            continue
+        try:
+            raw = path.read_text(encoding="utf-8")
+            return header + _reflow_license_body(raw)
+        except Exception as exc:
+            return (
+                header
+                + f"Could not read {label} at {path}:\n{exc}\n\n"
+                + f"Please see: {url_fallback}"
+            )
+
+    return (
+        header
+        + f"{label} file not found in bundled resources or project root.\n\n"
+        + f"Please see: {url_fallback}"
+    )
+
+
+def read_installer_license_text() -> str:
+    return _read_text_file_with_fallback(
+        label="Installer license (LGPL-3.0)",
+        filename="INSTALLER_LICENSE",
+        header="Installer UI License (LGPL-3.0)\n\n",
+        url_fallback="https://www.gnu.org/licenses/lgpl-3.0.txt",
+    )
+
+
+def read_product_license_text() -> str:
+    return _read_text_file_with_fallback(
+        label="Product license (GPL-3.0)",
+        filename="LICENSE",
+        header="Command Deck Product License (GPL-3.0)\n\n",
+        url_fallback="https://www.gnu.org/licenses/gpl-3.0.txt",
+    )
+
+
+class ThemeManager:
+    """Encapsulates installer theme palettes and application of QSS."""
+
+    def __init__(self, app: QApplication) -> None:
+        self._app = app
+
+    @staticmethod
+    def dark_palette() -> QPalette:
+        palette = QPalette()
+        palette.setColor(QPalette.Window, QColor(21, 16, 32))
+        palette.setColor(QPalette.WindowText, QColor(245, 245, 247))
+        palette.setColor(QPalette.Base, QColor(28, 20, 42))
+        palette.setColor(QPalette.AlternateBase, QColor(35, 26, 52))
+        palette.setColor(QPalette.ToolTipBase, QColor(45, 37, 80))
+        palette.setColor(QPalette.ToolTipText, QColor(245, 245, 247))
+        palette.setColor(QPalette.Text, QColor(245, 245, 247))
+        palette.setColor(QPalette.Button, QColor(45, 37, 80))
+        palette.setColor(QPalette.ButtonText, QColor(245, 245, 247))
+        palette.setColor(QPalette.Highlight, QColor(255, 159, 28))
+        palette.setColor(QPalette.HighlightedText, Qt.black)
+        return palette
+
+    def apply(self, mode: str) -> str:
+        if mode == "dark":
+            self._app.setPalette(self.dark_palette())
+            self._app.setStyle("Fusion")
+            self._app.setStyleSheet(DARK_QSS)
+        else:
+            self._app.setPalette(QApplication.style().standardPalette())
+            self._app.setStyle("Fusion")
+            self._app.setStyleSheet(LIGHT_QSS)
+        return mode
+
+
+class InstallerWindow(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.version = get_backend_version()
+        self.install_dir: Path = get_default_install_dir()
+
+        if sys.platform.startswith("win"):
+            existing = _windows_get_install_location()
+            if existing is not None and not _is_under_program_files(existing):
+                self.install_dir = existing
+
+        self.installed_version: str | None = None
+        self._version_cmp: int | None = None
+        if sys.platform.startswith("win"):
+            installed_version = _windows_get_installed_version()
+            if installed_version:
+                self.installed_version = installed_version
+                self._version_cmp = _compare_versions(installed_version, self.version)
+
+        self.current_theme = "dark"
+        self.total_files = 0
+        self.copied_files = 0
+
+        self.setWindowTitle(f"{APP_NAME} Installer")
+        self.resize(780, 520)
+
+        self._create_actions()
+        self._create_toolbar()
+        self._create_central_widget()
+        self._create_status_bar()
+        self._apply_theme(self.current_theme)
+
+        self._log(f"{APP_NAME} Installer v{self.version}")
+        self._log(f"Default install directory: {self.install_dir}")
+        self._refresh_versions_and_buttons()
+
+    def _ensure_subtitle_fits_one_line(self, text: str) -> None:
+        """Make the window wide enough that the subtitle does not wrap.
+
+        User requirement: the subtitle must remain a single horizontal line and
+        must not use ellipsis. Therefore we prevent the window from being sized
+        too narrow for the full subtitle.
+        """
+
+        try:
+            metrics = QFontMetrics(self.subtitle_label.font())
+            text_w = metrics.horizontalAdvance(text)
+
+            # Top layout margins in _create_central_widget()
+            outer_margins_w = 16 * 2
+
+            # Theme toggle buttons are fixed at 32x32 with spacing.
+            theme_buttons_w = (32 * 2) + 6
+
+            # Conservative slack for layout spacing + window frame.
+            slack = 80
+
+            desired = text_w + outer_margins_w + theme_buttons_w + slack
+            desired = max(int(desired), 620)
+
+            app = QApplication.instance()
+            if app is not None:
+                screen = app.primaryScreen()
+                if screen is not None:
+                    avail_w = int(screen.availableGeometry().width())
+                    desired = min(desired, max(avail_w, 620))
+
+            self.setMinimumWidth(max(self.minimumWidth(), desired))
+        except Exception:
+            # Never break the installer UI due to sizing calculations.
+            return
+
+    # ------------------------------------------------------------------ UI setup
+
+    def _create_actions(self) -> None:
+        self.install_action = QAction("Install", self)
+        self.install_action.triggered.connect(self.on_install_clicked)
+
+        self.repair_action = QAction("Repair", self)
+        self.repair_action.triggered.connect(self.on_repair_clicked)
+
+        self.uninstall_action = QAction("Uninstall", self)
+        self.uninstall_action.triggered.connect(self.on_uninstall_clicked)
+
+        self.about_action = QAction("About / License", self)
+        self.about_action.triggered.connect(self.on_about_clicked)
+
+        self.choose_dir_action = QAction("Change Install Location", self)
+        self.choose_dir_action.triggered.connect(self.on_choose_install_dir)
+
+    def _create_toolbar(self) -> None:
+        toolbar = QToolBar("Main Toolbar", self)
+        toolbar.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, toolbar)
+
+        toolbar.addAction(self.choose_dir_action)
+        toolbar.addSeparator()
+        toolbar.addAction(self.about_action)
+
+    def _create_central_widget(self) -> None:
+        central = QWidget(self)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        title_label = QLabel(f"{APP_NAME} Installer", self)
+        title_label.setObjectName("titleLabel")
+        title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        self.subtitle_label = QLabel("", self)
+        # User requirement: keep this as a single horizontal line.
+        # No ellipsis; if the window is made extremely narrow, the text will
+        # clip rather than wrap.
+        self.subtitle_label.setWordWrap(False)
+        self.subtitle_label.setTextFormat(Qt.PlainText)
+        self.subtitle_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.subtitle_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.subtitle_label.setMinimumHeight(QFontMetrics(self.subtitle_label.font()).height())
+
+        header_layout = QHBoxLayout()
+        header_text_layout = QVBoxLayout()
+        header_text_layout.addWidget(title_label)
+        header_text_layout.addWidget(self.subtitle_label)
+
+        theme_row = QHBoxLayout()
+        theme_row.setSpacing(6)
+
+        self.light_button = QPushButton("☀️", self)
+        self.light_button.setObjectName("lightThemeButton")
+        self.light_button.setCheckable(True)
+        self.light_button.setFixedSize(32, 32)
+        self.light_button.setToolTip("Switch to light mode")
+        self.light_button.clicked.connect(self.on_light_theme_clicked)
+
+        self.dark_button = QPushButton("🌙", self)
+        self.dark_button.setObjectName("darkThemeButton")
+        self.dark_button.setCheckable(True)
+        self.dark_button.setFixedSize(32, 32)
+        self.dark_button.setToolTip("Switch to dark mode")
+        self.dark_button.clicked.connect(self.on_dark_theme_clicked)
+
+        theme_row.addWidget(self.light_button)
+        theme_row.addWidget(self.dark_button)
+
+        header_layout.addLayout(header_text_layout)
+        header_layout.addStretch()
+        header_layout.addLayout(theme_row)
+        layout.addLayout(header_layout)
+
+        buttons_row = QVBoxLayout()
+        buttons_row.setSpacing(8)
+
+        self.install_button = QPushButton("Install")
+        self.install_button.setObjectName("installButton")
+        self.install_button.setMinimumHeight(40)
+        self.install_button.clicked.connect(self.on_install_clicked)
+
+        self.repair_button = QPushButton("Repair")
+        self.repair_button.setObjectName("repairButton")
+        self.repair_button.setMinimumHeight(40)
+        self.repair_button.clicked.connect(self.on_repair_clicked)
+
+        self.uninstall_button = QPushButton("Uninstall")
+        self.uninstall_button.setObjectName("uninstallButton")
+        self.uninstall_button.setMinimumHeight(40)
+        self.uninstall_button.clicked.connect(self.on_uninstall_clicked)
+
+        buttons_row.addWidget(self.install_button)
+        buttons_row.addWidget(self.repair_button)
+        buttons_row.addWidget(self.uninstall_button)
+        layout.addLayout(buttons_row)
+
+        self.install_dir_label = QLabel(f"Install directory:\n{self.install_dir}", self)
+        self.install_dir_label.setWordWrap(True)
+        self.install_dir_label.setStyleSheet("font-size: 11px;")
+        layout.addWidget(self.install_dir_label)
+
+        self.desktop_shortcut_checkbox = QCheckBox("Create Desktop shortcut", self)
+        self.start_menu_checkbox = QCheckBox("Add Start Menu entry", self)
+        self.autostart_checkbox = QCheckBox(
+            "Start Command Deck automatically when I sign in (system tray)",
+            self,
+        )
+
+        if sys.platform.startswith("win"):
+            self.desktop_shortcut_checkbox.setChecked(True)
+            self.start_menu_checkbox.setChecked(True)
+            self.autostart_checkbox.setChecked(False)
+        else:
+            for cb in (
+                self.desktop_shortcut_checkbox,
+                self.start_menu_checkbox,
+                self.autostart_checkbox,
+            ):
+                cb.setChecked(False)
+                cb.setEnabled(False)
+
+        options_layout = QVBoxLayout()
+        options_layout.setSpacing(2)
+        options_layout.addWidget(self.desktop_shortcut_checkbox)
+        options_layout.addWidget(self.start_menu_checkbox)
+        options_layout.addWidget(self.autostart_checkbox)
+        layout.addLayout(options_layout)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("Idle")
+        self.progress_bar.setMinimumHeight(18)
+        layout.addWidget(self.progress_bar)
+
+        self.log_view = QTextEdit(self)
+        self.log_view.setReadOnly(True)
+        self.log_view.setMinimumHeight(120)
+        self.log_view.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+        self.log_view.hide()
+
+        central.setLayout(layout)
+        self.setCentralWidget(central)
+
+    def _create_status_bar(self) -> None:
+        status = QStatusBar(self)
+        self.setStatusBar(status)
+        status.showMessage("Ready")
+
+    def _update_version_labels(self) -> None:
+        if self.installed_version:
+            text = (
+                f"Installer version {self.version} · "
+                f"Installed version {self.installed_version} at {self.install_dir}"
+            )
+        else:
+            text = f"Installer version {self.version} · No existing installation detected"
+        self.subtitle_label.setText(text)
+        self.subtitle_label.setToolTip(text)
+        self._ensure_subtitle_fits_one_line(text)
+
+    def _refresh_versions_and_buttons(self) -> None:
+        self._update_version_labels()
+        has_installed = self.installed_version is not None and self.install_dir.exists()
+        self.install_button.setEnabled(True)
+        self.repair_button.setEnabled(bool(has_installed))
+
+    # ------------------------------------------------------------------ theme
+
+    def _apply_theme(self, mode: str) -> None:
+        app = QApplication.instance()
+        if app is None:
+            return
+        theme_manager = ThemeManager(app)
+        self.current_theme = theme_manager.apply(mode)
+        self._log(f"Switched to {self.current_theme} theme")
+        self._update_theme_buttons()
+
+    def _update_theme_buttons(self) -> None:
+        is_dark = self.current_theme == "dark"
+        self.light_button.setChecked(not is_dark)
+        self.dark_button.setChecked(is_dark)
+
+    @Slot()
+    def on_light_theme_clicked(self) -> None:
+        if self.current_theme != "light":
+            self._apply_theme("light")
+
+    @Slot()
+    def on_dark_theme_clicked(self) -> None:
+        if self.current_theme != "dark":
+            self._apply_theme("dark")
+
+    # ------------------------------------------------------------------ actions
+
+    def _log(self, msg: str) -> None:
+        self.log_view.append(msg)
+        self.log_view.ensureCursorVisible()
+        self.statusBar().showMessage(msg, 5000)
+
+        try:
+            base_dir = Path(sys.argv[0]).resolve().parent
+        except Exception:
+            base_dir = PROJECT_ROOT
+
+        log_path = base_dir / "guiinstaller.log"
+        try:
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except Exception:
+            pass
+
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
+
+    @Slot()
+    def on_choose_install_dir(self) -> None:
+        initial = str(self.install_dir.parent)
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            "Choose installation directory",
+            initial,
+        )
+        if chosen:
+            self.install_dir = Path(chosen) / APP_ID
+            self.install_dir_label.setText(f"Install directory:\n{self.install_dir}")
+            self._log(f"Install directory set to: {self.install_dir}")
+
+    def _confirm(self, title: str, text: str) -> bool:
+        res = QMessageBox.question(
+            self,
+            title,
+            text,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return res == QMessageBox.Yes
+
+    def _show_error(self, title: str, text: str) -> None:
+        self._log(f"ERROR: {text}")
+        QMessageBox.critical(self, title, text)
+
+    def _show_info(self, title: str, text: str) -> None:
+        self._log(text)
+        QMessageBox.information(self, title, text)
+
+    @Slot()
+    def on_install_clicked(self) -> None:
+        self.choose_dir_action.setEnabled(False)
+        try:
+            self._log("Starting installation...")
+
+            if self.installed_version is not None and self._version_cmp == -1:
+                if not self._confirm(
+                    "Existing installation detected",
+                    (
+                        f"A previous version ({self.installed_version}) is installed at:\n"
+                        f"{self.install_dir}\n\n"
+                        f"To install version {self.version}, the old version should be "
+                        "uninstalled first.\n\n"
+                        "Do you want to uninstall the old version now?"
+                    ),
+                ):
+                    self._log(
+                        "Installation cancelled; user chose not to uninstall the "
+                        f"older version {self.installed_version}."
+                    )
+                    return
+
+                self._perform_uninstall(confirm=False)
+                self._log(
+                    "Old version removed at user's request via Install; "
+                    "no new installation started automatically."
+                )
+                return
+
+            payload_root = get_payload_root()
+            if payload_root is None:
+                self._show_error(
+                    "Payload not found",
+                    "Could not locate the installer payload.\n"
+                    "Make sure the payload directory exists or you are running a packaged installer.",
+                )
+                return
+
+            self._log(f"Installing from payload: {payload_root}")
+            if not self.install_dir.exists():
+                self.install_dir.mkdir(parents=True, exist_ok=True)
+
+            total_files = self._count_files(payload_root)
+            self._prepare_progress(total_files, "Installing")
+            self._copy_tree(payload_root, self.install_dir)
+
+            if sys.platform.startswith("win"):
+                self._create_windows_shortcuts()
+                self._apply_windows_autostart_setting()
+                self._register_windows_app()
+
+            self._finish_progress("Installation complete")
+            self.installed_version = self.version
+            self._version_cmp = 0
+            self._refresh_versions_and_buttons()
+            self._show_info(
+                "Installation complete",
+                f"{APP_NAME} version {self.version} has been installed to:\n{self.install_dir}",
+            )
+        except Exception as exc:
+            self._finish_progress("Install failed")
+            self._show_error("Install failed", f"Unexpected error during install:\n{exc}")
+        finally:
+            self.choose_dir_action.setEnabled(True)
+
+    @Slot()
+    def on_repair_clicked(self) -> None:
+        self.choose_dir_action.setEnabled(False)
+        try:
+            self._log("Starting repair...")
+            if not self.install_dir.exists():
+                self._show_error(
+                    "Not installed",
+                    f"No existing installation found at:\n{self.install_dir}\n\nRun Install first.",
+                )
+                return
+
+            payload_root = get_payload_root()
+            if payload_root is None:
+                self._show_error(
+                    "Payload not found",
+                    "Could not locate the installer payload for repair.",
+                )
+                return
+
+            if self.installed_version is not None and self._version_cmp is not None:
+                if self._version_cmp == -1:
+                    self._show_info(
+                        "Repairing older installation",
+                        (
+                            f"Repair will copy files for installer version {self.version} "
+                            f"over the existing installation (currently version {self.installed_version})."
+                        ),
+                    )
+                elif self._version_cmp == 1:
+                    self._show_info(
+                        "Repair may downgrade",
+                        (
+                            f"Repair will copy files for installer version {self.version} "
+                            f"over an installation that reports version {self.installed_version}."
+                        ),
+                    )
+
+            self._log(f"Repairing installation at {self.install_dir} from {payload_root}")
+            total_files = self._count_files(payload_root)
+            self._prepare_progress(total_files, "Repairing")
+            self._copy_tree(payload_root, self.install_dir)
+
+            if sys.platform.startswith("win"):
+                self._create_windows_shortcuts()
+                self._apply_windows_autostart_setting()
+
+            self._finish_progress("Repair complete")
+            self.installed_version = self.version
+            self._version_cmp = 0
+            self._refresh_versions_and_buttons()
+            self._show_info(
+                "Repair complete",
+                f"{APP_NAME} version {self.version} has been repaired at:\n{self.install_dir}",
+            )
+        except Exception as exc:
+            self._finish_progress("Repair failed")
+            self._show_error("Repair failed", f"Unexpected error during repair:\n{exc}")
+        finally:
+            self.choose_dir_action.setEnabled(True)
+
+    @Slot()
+    def on_uninstall_clicked(self) -> None:
+        self.choose_dir_action.setEnabled(False)
+        try:
+            self._perform_uninstall(confirm=True)
+        except Exception as exc:
+            self._finish_progress("Uninstall failed")
+            self._show_error("Uninstall failed", f"Unexpected error during uninstall:\n{exc}")
+        finally:
+            self.choose_dir_action.setEnabled(True)
+
+    @Slot()
+    def on_about_clicked(self) -> None:
+        installer_text = read_installer_license_text()
+        product_text = read_product_license_text()
+
+        combined = (
+            installer_text
+            + "\n\n"
+            + "=" * 80
+            + "\n\n"
+            + "Product license below applies to the installed Command Deck application:\n\n"
+            + product_text
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"About {APP_NAME}")
+
+        layout = QVBoxLayout(dialog)
+        text_edit = QTextEdit(dialog)
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(combined)
+        text_edit.setLineWrapMode(QTextEdit.WidgetWidth)
+        layout.addWidget(text_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok, parent=dialog)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.resize(520, 680)
+        dialog.exec()
+
+    # ------------------------------------------------------------------ copying
+
+    def _count_files(self, root: Path) -> int:
+        count = 0
+        for _, _, files in os.walk(root):
+            count += len(files)
+        return count
+
+    def _prepare_progress(self, total_files: int, label: str) -> None:
+        self.total_files = total_files
+        self.copied_files = 0
+
+        if total_files <= 0:
+            self.progress_bar.setRange(0, 1)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat(f"{label} (no files)")
+        else:
+            self.progress_bar.setRange(0, total_files)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat(f"{label} (%p%)")
+
+    def _update_progress(self) -> None:
+        if self.total_files <= 0:
+            return
+        self.copied_files += 1
+        self.progress_bar.setValue(self.copied_files)
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
+
+    def _finish_progress(self, label: str) -> None:
+        if self.total_files > 0:
+            self.progress_bar.setValue(self.total_files)
+        self.progress_bar.setFormat(label)
+
+    def _copy_tree(self, src: Path, dst: Path) -> None:
+        ignore_dir_names = {
+            ".git",
+            ".venv",
+            ".benchmarks",
+            "htmlcov",
+            ".pytest_cache",
+            "__pycache__",
+            "tests",
+            "node_modules",
+        }
+
+        for root, dirs, files in os.walk(src):
+            dirs[:] = [d for d in dirs if d not in ignore_dir_names]
+
+            rel_root = Path(root).relative_to(src)
+            target_root = dst / rel_root
+            target_root.mkdir(parents=True, exist_ok=True)
+
+            for name in files:
+                s = Path(root) / name
+                if name.endswith(".py_"):
+                    dest_name = name[:-1]
+                else:
+                    dest_name = name
+
+                d = target_root / dest_name
+                try:
+                    shutil.copy2(s, d)
+                    self._update_progress()
+                except Exception as exc:
+                    self._log(f"Failed to copy {s} -> {d}: {exc}")
+
+    def _delete_tree(self, root: Path) -> None:
+        if not root.exists():
+            return
+
+        for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+            base = Path(dirpath)
+
+            for name in filenames:
+                p = base / name
+                try:
+                    if p.exists():
+                        p.unlink()
+                    self._update_progress()
+                except Exception as exc:
+                    self._log(f"Failed to delete file {p}: {exc}")
+
+            for name in dirnames:
+                d = base / name
+                try:
+                    if d.exists():
+                        d.rmdir()
+                except Exception as exc:
+                    self._log(f"Failed to delete directory {d}: {exc}")
+
+        try:
+            if root.exists():
+                root.rmdir()
+        except Exception as exc:
+            self._log(f"Failed to delete install root {root}: {exc}")
+
+    def _perform_uninstall(self, confirm: bool = True) -> None:
+        self._log("Starting uninstall...")
+        self._stop_running_tray()
+
+        if not self.install_dir.exists():
+            self._finish_progress("Uninstall failed")
+            self._show_error("Not installed", f"No existing installation found at:\n{self.install_dir}")
+            return
+
+        total_files = self._count_files(self.install_dir)
+        if total_files <= 0:
+            total_files = 1
+        self._prepare_progress(total_files, "Uninstalling")
+
+        installed_version = self.installed_version or "previously installed"
+        if confirm:
+            if not self._confirm(
+                "Confirm uninstall",
+                (
+                    f"Are you sure you want to remove {APP_NAME} version "
+                    f"{installed_version} from:\n{self.install_dir}?"
+                ),
+            ):
+                self._finish_progress("Uninstall cancelled")
+                return
+
+        self._delete_tree(self.install_dir)
+
+        if sys.platform.startswith("win"):
+            self._remove_windows_shortcuts()
+            self._set_windows_autostart_enabled(False)
+            self._unregister_windows_app()
+
+        self.installed_version = None
+        self._version_cmp = None
+
+        self._finish_progress("Uninstall complete")
+        self._refresh_versions_and_buttons()
+        self._show_info(
+            "Uninstall complete",
+            f"{APP_NAME} version {installed_version} has been removed from:\n{self.install_dir}",
+        )
+
+    # ------------------------------------------------------------------ Windows autostart
+
+    def _apply_windows_autostart_setting(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        enabled = bool(self.autostart_checkbox.isChecked())
+        self._set_windows_autostart_enabled(enabled)
+
+    def _set_windows_autostart_enabled(self, enabled: bool) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        try:
+            import winreg  # type: ignore[import-not-found]
+        except ImportError:
+            self._log("winreg not available; cannot configure auto-start.")
+            return
+
+        runtime_exe = self.install_dir / RUNTIME_EXE_NAME
+        cmd = f'"{runtime_exe}" --no-browser'
+
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                WINDOWS_RUN_KEY,
+                0,
+                winreg.KEY_SET_VALUE,
+            ) as key:
+                if enabled:
+                    winreg.SetValueEx(key, WINDOWS_RUN_VALUE_NAME, 0, winreg.REG_SZ, cmd)
+                    self._log("Enabled auto-start on login (system tray).")
+                else:
+                    try:
+                        winreg.DeleteValue(key, WINDOWS_RUN_VALUE_NAME)
+                    except FileNotFoundError:
+                        pass
+                    self._log("Disabled auto-start on login.")
+        except Exception as exc:
+            self._log(f"Failed to configure auto-start on login: {exc}")
+
+    def _stop_running_tray(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        try:
+            CREATE_NO_WINDOW = 0x08000000
+            startup_info = subprocess.STARTUPINFO()
+            startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+
+            subprocess.run(
+                ["taskkill", "/IM", RUNTIME_EXE_NAME, "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=CREATE_NO_WINDOW,
+                startupinfo=startup_info,
+            )
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ Windows shortcuts
+
+    def _windows_shortcut_paths(self) -> tuple[Path, Path]:
+        shortcut_name = f"{APP_ID}.lnk"
+
+        user_profile = os.environ.get("USERPROFILE") or str(Path.home())
+        desktop_dir = Path(user_profile) / "Desktop"
+        desktop_shortcut = desktop_dir / shortcut_name
+
+        appdata = os.environ.get("APPDATA", "")
+        start_menu_root = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        start_menu_dir = start_menu_root / APP_ID
+        start_menu_shortcut = start_menu_dir / shortcut_name
+        return desktop_shortcut, start_menu_shortcut
+
+    def _create_windows_shortcuts(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+
+        runtime_exe = self.install_dir / RUNTIME_EXE_NAME
+        self._log(f"Shortcut creation using install dir: {self.install_dir}")
+        self._log(f"Expected runtime EXE at: {runtime_exe}")
+
+        if not runtime_exe.exists():
+            runtime_candidates: list[Path] = []
+            try:
+                runtime_candidates.append(Path(__file__).resolve().parent / "runtime" / RUNTIME_EXE_NAME)
+            except Exception:
+                pass
+            try:
+                runtime_candidates.append(Path(sys.argv[0]).resolve().parent / "runtime" / RUNTIME_EXE_NAME)
+            except Exception:
+                pass
+
+            recovered = False
+            for candidate in runtime_candidates:
+                self._log(f"Runtime EXE missing; probing runtime data at: {candidate}")
+                if candidate.exists():
+                    try:
+                        shutil.copy2(candidate, runtime_exe)
+                        self._log(
+                            "Recovered runtime EXE into install directory from runtime data: "
+                            f"{candidate} -> {runtime_exe}"
+                        )
+                        recovered = True
+                        break
+                    except Exception as exc:
+                        self._log(f"Failed to recover runtime EXE from runtime data: {exc}")
+
+            if not recovered:
+                payload_root = get_payload_root()
+                if payload_root is not None:
+                    candidate = payload_root / RUNTIME_EXE_NAME
+                    self._log(f"Runtime EXE still missing; probing payload at: {candidate}")
+                    if candidate.exists():
+                        try:
+                            shutil.copy2(candidate, runtime_exe)
+                            self._log(
+                                "Recovered runtime EXE into install directory from payload: "
+                                f"{candidate} -> {runtime_exe}"
+                            )
+                        except Exception as exc:
+                            self._log(f"Failed to copy runtime EXE from payload: {exc}")
+
+        if not runtime_exe.exists():
+            self._log("Runtime EXE not found after recovery attempts; skipping shortcut creation.")
+            return
+
+        target = runtime_exe
+        # Use the EXE itself as the icon source. This is the most reliable
+        # option for Windows Shell (Start menu + Desktop), and avoids failures
+        # caused by malformed/odd-sized .ico files.
+        icon = runtime_exe
+
+        desktop_shortcut, start_menu_shortcut = self._windows_shortcut_paths()
+        if self.desktop_shortcut_checkbox.isChecked():
+            self._create_single_shortcut(desktop_shortcut, target, icon)
+        if self.start_menu_checkbox.isChecked():
+            start_menu_shortcut.parent.mkdir(parents=True, exist_ok=True)
+            self._create_single_shortcut(start_menu_shortcut, target, icon)
+
+    def _create_single_shortcut(self, shortcut_path: Path, target: Path, icon: Path) -> None:
+        try:
+            shortcut_path.parent.mkdir(parents=True, exist_ok=True)
+            target_s = str(target)
+            icon_s = str(icon)
+            working_dir_s = str(target.parent)
+            shortcut_s = str(shortcut_path)
+
+            def esc(s: str) -> str:
+                return s.replace("'", "''")
+
+            ps_command = (
+                "$shell = New-Object -ComObject WScript.Shell;"
+                f"$shortcut = $shell.CreateShortcut('{esc(shortcut_s)}');"
+                f"$shortcut.TargetPath = '{esc(target_s)}';"
+                f"$shortcut.WorkingDirectory = '{esc(working_dir_s)}';"
+                f"$shortcut.IconLocation = '{esc(icon_s)},0';"
+                "$shortcut.Save();"
+            )
+
+            kwargs = {"check": True, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+            if sys.platform.startswith("win"):
+                kwargs["creationflags"] = 0x08000000
+
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_command], **kwargs)
+            self._log(f"Created shortcut: {shortcut_path}")
+        except Exception as exc:
+            self._log(f"Failed to create shortcut {shortcut_path}: {exc}")
+
+    def _remove_windows_shortcuts(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        desktop_shortcut, start_menu_shortcut = self._windows_shortcut_paths()
+        for path in (desktop_shortcut, start_menu_shortcut):
+            try:
+                if path.exists():
+                    path.unlink()
+                    self._log(f"Removed shortcut: {path}")
+            except Exception as exc:
+                self._log(f"Failed to remove shortcut {path}: {exc}")
+
+    def _register_windows_app(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        try:
+            import winreg  # type: ignore[import-not-found]
+        except ImportError:
+            self._log("winreg not available; skipping Add/Remove registration.")
+            return
+
+        try:
+            exe_src = Path(sys.argv[0]).resolve()
+        except Exception as exc:
+            self._log(f"Failed to resolve installer executable path: {exc}")
+            return
+
+        installer_copy = self.install_dir / exe_src.name
+        try:
+            if not installer_copy.exists() or os.path.getsize(installer_copy) == 0:
+                self.install_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(exe_src, installer_copy)
+                self._log(f"Copied installer executable to {installer_copy} for uninstall integration.")
+            exe_for_registry = installer_copy
+        except Exception as exc:
+            self._log(
+                "Failed to copy installer into install directory for uninstall; "
+                f"falling back to source path {exe_src}: {exc}"
+            )
+            exe_for_registry = exe_src
+
+        # Prefer the installed runtime EXE as DisplayIcon for Add/Remove.
+        # This is reliable even if a standalone .ico is missing.
+        runtime_exe = self.install_dir / RUNTIME_EXE_NAME
+        if runtime_exe.exists():
+            icon_path = runtime_exe
+        else:
+            icon_path = exe_for_registry
+
+        try:
+            key = winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER,
+                WINDOWS_UNINSTALL_KEY,
+                0,
+                winreg.KEY_WRITE,
+            )
+            with key:
+                winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
+                winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, str(icon_path))
+                winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Oliver Ernster")
+                winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(self.install_dir))
+
+                uninstall_cmd = f'"{exe_for_registry}"'
+                winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, uninstall_cmd)
+                winreg.SetValueEx(key, "ModifyPath", 0, winreg.REG_SZ, uninstall_cmd)
+                winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 0)
+                winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 0)
+                if self.version:
+                    winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, self.version)
+            self._log("Registered application in Windows Add/Remove Programs (HKCU).")
+        except Exception as exc:
+            self._log(f"Failed to register app in Add/Remove Programs: {exc}")
+
+    def _unregister_windows_app(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        try:
+            import winreg  # type: ignore[import-not-found]
+        except ImportError:
+            return
+
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, WINDOWS_UNINSTALL_KEY)
+            self._log("Removed Windows Add/Remove Programs entry.")
+        except FileNotFoundError:
+            self._log("Windows Add/Remove Programs entry not found to remove.")
+        except OSError as exc:
+            self._log(f"Failed to remove Add/Remove Programs entry: {exc}")
+
+
+def _is_under_program_files(path: Path) -> bool:
+    if not sys.platform.startswith("win"):
+        return False
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+
+    candidates: list[Path] = []
+    program_files = os.environ.get("PROGRAMFILES")
+    if program_files:
+        candidates.append(Path(program_files))
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)")
+    if program_files_x86:
+        candidates.append(Path(program_files_x86))
+
+    for base in candidates:
+        try:
+            if resolved.is_relative_to(base):
+                return True
+        except AttributeError:
+            try:
+                if str(resolved).lower().startswith(str(base.resolve()).lower()):
+                    return True
+            except OSError:
+                continue
+    return False
+
+
+def _compare_versions(installed: str, installer: str) -> int:
+    def _parse(v: str) -> list[int]:
+        parts = v.split(".")
+        nums: list[int] = []
+        for part in parts:
+            num = 0
+            for ch in part:
+                if ch.isdigit():
+                    num = num * 10 + int(ch)
+                else:
+                    break
+            nums.append(num)
+        return nums
+
+    try:
+        a = _parse(installed)
+        b = _parse(installer)
+    except Exception:
+        return 0
+
+    max_len = max(len(a), len(b))
+    a.extend([0] * (max_len - len(a)))
+    b.extend([0] * (max_len - len(b)))
+
+    for av, bv in zip(a, b, strict=False):
+        if av < bv:
+            return -1
+        if av > bv:
+            return 1
+    return 0
+
+
+def _windows_get_installed_version() -> Optional[str]:
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        import winreg  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, WINDOWS_UNINSTALL_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, "DisplayVersion")
+            if isinstance(value, str) and value:
+                return value
+    except OSError:
+        return None
+    return None
+
+
+def _windows_get_install_location() -> Optional[Path]:
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        import winreg  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, WINDOWS_UNINSTALL_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, "InstallLocation")
+            if value:
+                return Path(value)
+    except OSError:
+        return None
+    return None
+
+
+def main() -> int:
+    app = QApplication(sys.argv)
+    app.setApplicationName(f"{APP_NAME} Installer")
+
+    splash: QSplashScreen | None = None
+    icon_path = PROJECT_ROOT / f"{APP_ID}.ico"
+    if icon_path.exists():
+        try:
+            app.setWindowIcon(QIcon(str(icon_path)))
+            pixmap = QPixmap(str(icon_path))
+            splash = QSplashScreen(pixmap)
+            splash.showMessage(
+                "Command Deck Installer",
+                Qt.AlignHCenter | Qt.AlignBottom,
+                QColor(245, 245, 247),
+            )
+            splash.show()
+            app.processEvents()
+        except Exception:
+            splash = None
+
+    window = InstallerWindow()
+    window.show()
+
+    if splash is not None:
+        splash.finish(window)
+
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+

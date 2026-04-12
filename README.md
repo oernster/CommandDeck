@@ -198,3 +198,83 @@ Run it from the repo root:
 cd backend
 python -m app.tray
 ```
+
+---
+
+## Windows release: packaged runtime + GUI installer
+
+Command Deck ships a self-contained Windows runtime executable and a GUI
+installer, both built with Nuitka.
+
+Single source of truth for versioning:
+
+* [`backend/app/version.py`](backend/app/version.py:1) (`VERSION = "x.y.z"`)
+
+### 1) Prerequisites (build machine)
+
+* Python (use the repo `venv`)
+* Visual Studio Build Tools (MSVC) for Nuitka C compilation
+* Node.js + npm (to build the frontend production bundle)
+
+### 2) One-time environment setup
+
+From repo root:
+
+```powershell
+python -m venv venv
+./venv/Scripts/Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+### 3) Build icon (.ico) from existing favicon asset
+
+Source-of-truth icon is:
+
+* [`frontend/public/favicon.svg`](frontend/public/favicon.svg:1)
+
+Generate the Windows icon file:
+
+```powershell
+./venv/Scripts/Activate.ps1
+python buildicon.py
+```
+
+This writes `CommandDeck.ico` in the repo root and is used consistently for:
+
+* installer window icon
+* packaged installer icon
+* shortcuts icon
+* Add/Remove Programs icon
+
+### 4) Build the packaged runtime (CommandDeck.exe)
+
+`CommandDeck.exe` is the installed runtime entrypoint targeted by shortcuts.
+It hosts the tray and starts the FastAPI backend in-process.
+
+```powershell
+./venv/Scripts/Activate.ps1
+python buildruntime.py
+```
+
+Output:
+
+* `CommandDeck.exe`
+
+### 5) Build the GUI installer (CommandDeckInstaller.exe)
+
+The installer bundles a curated payload directory, including:
+
+* `CommandDeck.exe`
+* `backend/` (as data payload)
+* `frontend/` including `frontend/dist` production build
+* `LICENSE` (product license)
+* `INSTALLER_LICENSE` (installer UI license)
+
+```powershell
+./venv/Scripts/Activate.ps1
+python buildguiinstaller.py
+```
+
+Output:
+
+* `CommandDeckInstaller.exe`

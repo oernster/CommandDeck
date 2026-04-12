@@ -15,4 +15,9 @@ mypy>=1.0
 # Tray (Windows-only runtime)
 pystray>=0.19
 pillow>=10.0
+pywin32>=306
+
+# Installer + packaging (Windows release tooling)
+PySide6>=6.6
+nuitka>=2.0
 

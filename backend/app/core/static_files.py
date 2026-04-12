@@ -1,7 +1,25 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+
+def _runtime_root_dir() -> Path:
+    """Return the runtime root directory.
+
+    - In packaged/frozen installs, the EXE lives in the install directory; we
+      treat that as the runtime root.
+    - In dev/source, preserve the existing repo-root derived path.
+    """
+    try:
+        if getattr(__import__("sys"), "frozen", False):
+            return Path(__import__("sys").argv[0]).resolve().parent
+    except Exception:
+        pass
+
+    backend_dir = Path(__file__).resolve().parents[2]
+    return backend_dir.parent
 
 
 def frontend_dist_dir() -> Path:
@@ -17,7 +35,27 @@ def frontend_dist_dir() -> Path:
     if override:
         return Path(override).expanduser().resolve()
 
-    # backend/app/core/static_files.py -> backend/app/core -> backend/app -> backend
-    backend_dir = Path(__file__).resolve().parents[2]
-    repo_root = backend_dir.parent
-    return repo_root / "frontend" / "dist"
+    # Preferred: installed payload uses: <install_root>/frontend/dist
+    try:
+        exe_root = Path(sys.argv[0]).resolve().parent
+        installed = exe_root / "frontend" / "dist"
+        if (installed / "index.html").is_file():
+            return installed
+    except Exception:
+        pass
+
+    # Fallback: in onefile mode, data dirs are extracted next to the executing
+    # Python files under a temporary extraction root. Search upwards from this
+    # module for a sibling frontend/dist.
+    try:
+        here = Path(__file__).resolve()
+        for parent in list(here.parents)[:8]:
+            candidate = parent / "frontend" / "dist"
+            if (candidate / "index.html").is_file():
+                return candidate
+    except Exception:
+        pass
+
+    # Default guess (may not exist).
+    root = _runtime_root_dir()
+    return root / "frontend" / "dist"
