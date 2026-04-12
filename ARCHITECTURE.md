@@ -1,40 +1,57 @@
 
-# Command Deck — Architecture (current)
+# Command Deck — Runtime Architecture (current)
 
-This document describes the *implemented* v1 architecture as it exists in the repository.
+This document describes the **implemented runtime architecture** as it exists in the repository.
 
-Principles: local-first, explicit operations, minimal surface area, deterministic behaviour.
+Scope: FastAPI backend + React frontend + local tray launcher. Packaging/installer architecture is intentionally out of scope.
 
-## 1) Backend architecture
+Principles: local-first, minimal surface area, deterministic behaviour, explicit operations.
 
-### 1.1 Entry point
+## 1) Backend (FastAPI)
 
-The FastAPI application is created in [`backend/app/main.py`](backend/app/main.py:1).
+### 1.1 App creation + lifecycle
 
-Key responsibilities:
+The FastAPI application is constructed via an app factory in [`backend/app/main.py`](backend/app/main.py:1).
 
-- Create the app via an app factory (`create_app`).
-- Use a lifespan handler (no deprecated startup hooks).
-- Register routers for commands/outcomes/sessions/health.
-- Serve the built frontend from `frontend/dist` when it exists (see §3).
+Key runtime responsibilities in [`create_app()`](backend/app/main.py:30):
 
-### 1.2 Strict layering
+- Create the FastAPI app with title/version.
+- Register routers for health/commands/outcomes/sessions.
+- Centralize exception mapping to a small JSON error surface (`{error: ...}`) and stable status codes.
+- Configure HTTP caching behaviour:
+  - API responses (`/api/*`) are forced to no-store via middleware in [`_api_cache_control()`](backend/app/main.py:64).
+  - Frontend HTML app shell is served with no-cache headers.
+  - Hashed build assets are served with immutable caching (see §1.6).
 
-Dependency direction:
+Startup/shutdown uses the modern lifespan mechanism (no deprecated `on_event` hooks) via [`lifespan()`](backend/app/main.py:22), which ensures the database file/schema exist by calling [`init_database_file()`](backend/app/core/lifecycle.py:10).
+
+### 1.2 Configuration (minimal)
+
+Configuration is intentionally minimal and centralized in [`Settings`](backend/app/core/config.py:85) at [`backend/app/core/config.py`](backend/app/core/config.py:1).
+
+- Default server bind is `127.0.0.1:8001` (see [`Settings.host`](backend/app/core/config.py:92) and [`Settings.port`](backend/app/core/config.py:93)).
+- SQLite path is resolved by [`_default_sqlite_path()`](backend/app/core/config.py:44).
+  - Override: `COMMANDDECK_SQLITE_PATH`.
+  - Dev/source default: per-user app data (Windows: `LOCALAPPDATA`/`APPDATA`).
+  - Runtime/installed default: next to the executable.
+
+### 1.3 Layering and dependency direction
+
+Dependency direction is one-way:
 
 ```text
-API → Services → Repositories → Database
+API → Services → Repositories → SQLite
 ```
 
 Code locations:
 
 - API routers (HTTP only): [`backend/app/api/`](backend/app/api/__init__.py:1)
 - Services (business rules, validation): [`backend/app/services/`](backend/app/services/__init__.py:1)
-- Repositories (SQL only): [`backend/app/repositories/`](backend/app/repositories/__init__.py:1)
-- Domain (pure types/enums/schemas): [`backend/app/domain/`](backend/app/domain/__init__.py:1)
-- Core wiring (config, DB connections, lifecycle): [`backend/app/core/`](backend/app/core/__init__.py:1)
+- Repositories (SQL only, transaction boundaries): [`backend/app/repositories/`](backend/app/repositories/__init__.py:1)
+- Domain (pure enums/models/schemas/errors): [`backend/app/domain/`](backend/app/domain/__init__.py:1)
+- Core wiring (settings, DB connection, lifecycle, static serving): [`backend/app/core/`](backend/app/core/__init__.py:1)
 
-### 1.3 HTTP API surface
+### 1.4 HTTP API surface
 
 Routers:
 
@@ -43,84 +60,117 @@ Routers:
 - Outcomes: [`backend/app/api/outcomes.py`](backend/app/api/outcomes.py:1)
 - Sessions: [`backend/app/api/sessions.py`](backend/app/api/sessions.py:1)
 
-Error handling is intentionally simple and consistent (`{error: ...}`) and is centralized in the app factory.
+Notable endpoints (see router implementations for exact request/response schemas):
 
-### 1.4 Persistence (SQLite)
+- Commands
+  - List: [`list_commands()`](backend/app/api/commands.py:27) (`GET /api/commands`), optional `category` + `status` filters.
+  - Create: [`create_command()`](backend/app/api/commands.py:52) (`POST /api/commands`).
+  - Update: [`update_command()`](backend/app/api/commands.py:89) (`PATCH /api/commands/{id}`).
+  - Delete: [`delete_command()`](backend/app/api/commands.py:119) (`DELETE /api/commands/{id}`).
+  - Reorder (persisted ordering): [`reorder_commands()`](backend/app/api/commands.py:131) (`POST /api/commands/reorder`).
+- Outcomes
+  - List for command: [`list_outcomes()`](backend/app/api/outcomes.py:28) (`GET /api/commands/{command_id}/outcomes`).
+  - Create: [`create_outcome()`](backend/app/api/outcomes.py:41) (`POST /api/commands/{command_id}/outcomes`).
+  - Delete: [`delete_outcome()`](backend/app/api/outcomes.py:52) (`DELETE /api/outcomes/{outcome_id}`).
+- Sessions
+  - List: [`list_sessions()`](backend/app/api/sessions.py:22) (`GET /api/sessions`), optional `category` and `active`.
+  - Active session: [`get_active_session()`](backend/app/api/sessions.py:39) (`GET /api/sessions/active`).
+  - Latest session per category: [`latest_by_category()`](backend/app/api/sessions.py:50) (`GET /api/sessions/latest-by-category`).
+  - Start/stop: [`start_session()`](backend/app/api/sessions.py:68) and [`stop_session()`](backend/app/api/sessions.py:82).
 
-SQLite schema is created/ensured at runtime via [`init_db()`](backend/app/core/database.py:9).
+### 1.5 Persistence (SQLite)
+
+Connections are provided to request handlers via the FastAPI dependency [`get_db()`](backend/app/core/database.py:155).
+
+Schema is created/ensured at runtime via [`init_db()`](backend/app/core/database.py:83). v1 intentionally does not use a migrations framework; instead it performs small, safe, idempotent upgrades.
+
+Tables (see [`init_db()`](backend/app/core/database.py:83)):
+
+- `commands`: intent items with a persisted, per-category ordering using `sort_index`.
+  - Ordering semantics live in [`CommandRepository.list()`](backend/app/repositories/command_repository.py:13) and are persisted via [`CommandRepository.reorder()`](backend/app/repositories/command_repository.py:120).
+  - A startup schema upgrade ensures `sort_index` exists and is backfilled via [`_ensure_commands_sort_index()`](backend/app/core/database.py:15).
+- `outcomes`: immutable historical notes attached to commands (FK, cascade delete).
+- `sessions`: category-level time tracking; `ended_at` is `NULL` while active.
 
 Time handling:
 
-- Stored in DB as UTC epoch seconds (integers).
-- Rendered at the API boundary as ISO 8601 `Z` strings via helpers in [`backend/app/domain/models.py`](backend/app/domain/models.py:1).
-- Session timestamps are the source of truth: each session stores `started_at` and `ended_at` (`ended_at` is null while active). Durations are always derived from these timestamps; any live timer in the UI is a presentation concern.
+- Stored in SQLite as UTC epoch seconds (`INTEGER`).
+- Rendered at the API boundary as ISO 8601 `Z` strings via [`epoch_seconds_to_iso8601_z()`](backend/app/domain/models.py:13) when constructing response schemas in [`backend/app/domain/schemas.py`](backend/app/domain/schemas.py:1).
 
-## 2) Frontend architecture
+Enums:
 
-The v1 UI is a single-screen React app.
+- Categories: [`Category`](backend/app/domain/enums.py:6) (`Design`, `Build`, `Review`, `Maintain`, `Recover`).
+- Status values: [`Status`](backend/app/domain/enums.py:21) (`Not Started`, `In Progress`, `Blocked`, `Complete`).
 
-Entry:
+### 1.6 Single-address static serving (optional)
+
+If a production build exists under `frontend/dist`, the backend serves it from the same address.
+
+Implementation details:
+
+- Dist directory resolution: [`frontend_dist_dir()`](backend/app/core/static_files.py:27).
+  - Override: `COMMANDDECK_FRONTEND_DIST_DIR` (primarily for tests / non-standard deployments).
+- Hashed build assets under `/assets/*` are mounted with long-lived immutable caching via [`AssetsStaticFiles`](backend/app/core/static_files.py:66).
+- The HTML app shell (`/` and SPA fallback `/{path:path}`) is served with explicit no-cache headers in [`create_app()`](backend/app/main.py:30).
+
+## 2) Frontend (Vite + React)
+
+The v1 UI is a single-screen React application.
+
+Entry points:
 
 - App root: [`frontend/src/App.tsx`](frontend/src/App.tsx:1)
 - React bootstrap: [`frontend/src/main.tsx`](frontend/src/main.tsx:1)
 
-API client:
+Dev-server integration:
 
-- Fetch wrapper: [`frontend/src/api/http.ts`](frontend/src/api/http.ts:1)
+- Vite proxies `/api/*` to the backend (default `http://127.0.0.1:8001`) in [`frontend/vite.config.ts`](frontend/vite.config.ts:1).
+
+API client layer:
+
+- Fetch wrapper + typed error handling: [`frontend/src/api/http.ts`](frontend/src/api/http.ts:1)
 - Commands client: [`frontend/src/api/commands.ts`](frontend/src/api/commands.ts:1)
 - Outcomes client: [`frontend/src/api/outcomes.ts`](frontend/src/api/outcomes.ts:1)
 - Sessions client: [`frontend/src/api/sessions.ts`](frontend/src/api/sessions.ts:1)
 
 Primary UI feature:
 
-- Board + session panel + timer: [`frontend/src/features/commands/Board.tsx`](frontend/src/features/commands/Board.tsx:1)
-- Command detail drawer (edit + outcomes): [`frontend/src/features/commands/CommandDrawer.tsx`](frontend/src/features/commands/CommandDrawer.tsx:1)
-- Create command modal: [`frontend/src/features/commands/CreateCommandModal.tsx`](frontend/src/features/commands/CreateCommandModal.tsx:1)
+- Board (columns by category), drag-and-drop ordering, session panel + live timer: [`Board`](frontend/src/features/commands/Board.tsx:39)
+- Command detail drawer (edit + outcomes): [`CommandDrawer`](frontend/src/features/commands/CommandDrawer.tsx:1)
+- Create command modal: [`CreateCommandModal`](frontend/src/features/commands/CreateCommandModal.tsx:1)
 
-Frontend state model is intentionally small: fetch on load; refetch after mutations; derive the session timer client-side from the active session start time.
+Frontend state model (deliberately small):
 
-## 3) Single-address static serving
+- Load commands and session state on mount, then refetch after mutations (see [`refresh()`](frontend/src/features/commands/Board.tsx:106)).
+- Session timer is derived client-side from the active session `started_at` timestamp and an interval tick (see [`nowMs`](frontend/src/features/commands/Board.tsx:58)).
+- Reordering is persisted by sending full per-category id lists to `POST /api/commands/reorder` (see [`commitReorder()`](frontend/src/features/commands/Board.tsx:100)).
 
-When a production build exists under `frontend/dist`, the backend serves it:
+Constants mirror backend enums:
 
-- `GET /` returns `index.html`
-- `GET /assets/*` serves built assets when present
-- `GET /{path:path}` returns `index.html` as an SPA fallback
+- Categories/status lists used by the UI live in [`frontend/src/features/commands/constants.ts`](frontend/src/features/commands/constants.ts:1).
 
-Implementation:
+## 3) Local tray launcher (Windows-only)
 
-- Dist directory resolution helper: [`frontend_dist_dir()`](backend/app/core/static_files.py:7)
-- App wiring: [`create_app()`](backend/app/main.py:30)
+The dev/source tray launcher lives under [`backend/app/tray/`](backend/app/tray/__init__.py:1).
 
-## 4) Local runtime (tray)
+- Entry point module: [`backend/app/tray/__main__.py`](backend/app/tray/__main__.py:1)
+- Runtime logic (starts uvicorn as a background process and hosts a tray icon): [`run_tray()`](backend/app/tray/runtime.py:161)
 
-The Windows-only tray runtime is implemented under [`backend/app/tray/`](backend/app/tray/__init__.py:1).
+## 4) Testing and quality gates
 
-Entry point:
-
-- Module runner: [`backend/app/tray/__main__.py`](backend/app/tray/__main__.py:1)
-
-Runtime logic:
-
-- Backend process launch + tray icon: [`backend/app/tray/runtime.py`](backend/app/tray/runtime.py:1)
-
-## 5) Testing and quality gates
-
-Backend tests are full-stack (API → service → repo → real SQLite) and run at 100% coverage.
+Backend tests are full-stack (API → service → repo → real SQLite) and enforce 100% coverage via [`pyproject.toml`](pyproject.toml:1).
 
 - Test fixtures: [`backend/tests/conftest.py`](backend/tests/conftest.py:1)
-- Coverage gate config: [`pyproject.toml`](pyproject.toml:1)
 
 Mermaid overview:
 
 ```mermaid
 flowchart TD
-  UI[Frontend UI] --> API[FastAPI routers]
+  UI[React UI] --> HTTP[HTTP /api]
+  HTTP --> API[FastAPI routers]
   API --> SVC[Services]
   SVC --> REPO[Repositories]
-  REPO --> DB[SQLite]
-  DB --> REPO
-  REPO --> SVC
-  SVC --> API
-  API --> UI
+  REPO --> DB[SQLite file]
+  UI -->|optional build| STATIC[HTTP / assets and SPA shell]
+  STATIC --> API
 ```

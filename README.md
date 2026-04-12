@@ -24,10 +24,10 @@ Commands represent intent.
 
 Each command belongs to a category and progresses through a simple state model:
 
-- Blocked
-- In Progress
-- Complete
 - Not Started
+- In Progress
+- Blocked
+- Complete
 
 Commands are not plans.
 They are active units of execution.
@@ -93,6 +93,11 @@ It exists to answer:
 ## Storage
 
 A simple SQLite database is used for persistence.
+
+Runtime notes:
+
+- In dev/source runs, the default DB location is per-user app data (Windows: `LOCALAPPDATA`/`APPDATA`). See [`_default_sqlite_path()`](backend/app/core/config.py:44).
+- Override with `COMMANDDECK_SQLITE_PATH`. See [`_default_sqlite_path()`](backend/app/core/config.py:55).
 
 The system is intentionally minimal.
 
