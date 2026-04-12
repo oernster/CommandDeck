@@ -16,6 +16,17 @@ class CommandUpdateRequest(BaseModel):
     status: str | None = None
 
 
+class CommandReorderRequest(BaseModel):
+    """Reorder commands within (and optionally across) categories.
+
+    The payload provides the *full ordered list* of command ids for each category
+    affected by the move. This makes the operation deterministic and easy to
+    validate.
+    """
+
+    by_category: dict[str, list[int]]
+
+
 class CommandResponse(BaseModel):
     id: int
     title: str

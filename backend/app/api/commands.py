@@ -9,6 +9,7 @@ from app.domain.enums import Category, Status
 from app.domain.errors import NotFoundError, ValidationError
 from app.domain.schemas import (
     CommandCreateRequest,
+    CommandReorderRequest,
     CommandResponse,
     CommandUpdateRequest,
 )
@@ -123,4 +124,26 @@ def delete_command(
     ok = service.delete(command_id)
     if not ok:
         raise NotFoundError("Command not found")
+    return {"ok": True}
+
+
+@router.post("/api/commands/reorder")
+def reorder_commands(
+    payload: CommandReorderRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, bool]:
+    """Persist a new ordering for one or more categories.
+
+    The payload provides ordered command id lists keyed by category name.
+    """
+
+    by_category: dict[Category, list[int]] = {}
+    for raw_category, ids in payload.by_category.items():
+        parsed = Category.from_str(raw_category)
+        if parsed is None:
+            raise ValidationError("Invalid category")
+        by_category[parsed] = ids
+
+    service = _service(conn)
+    service.reorder(by_category)
     return {"ok": True}

@@ -58,3 +58,11 @@ export async function deleteCommand(id: number): Promise<{ ok: true }> {
   });
 }
 
+export async function reorderCommands(input: {
+  by_category: Record<Category, number[]>;
+}): Promise<{ ok: true }> {
+  return await apiFetch<{ ok: true }>("/api/commands/reorder", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

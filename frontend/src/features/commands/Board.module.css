@@ -160,17 +160,57 @@
   border-radius: 10px;
   padding: 9px;
   cursor: pointer;
+  /* Needed so inset rings render reliably with border-radius. */
+  position: relative;
 }
 
-.card:focus-within {
-  outline: 2px solid rgba(120, 170, 255, 0.5);
-  outline-offset: 2px;
+.cardDragging {
+  opacity: 0.85;
 }
 
-.cardTop {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* Full-ring overlay (doesn't get clipped and can't be overridden by other shadows). */
+.cardDragging::after,
+.card:focus-within::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(120, 170, 255, 0.85);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.cardDropBefore {
+  /* Drop indicator is drawn via pseudo-element so it doesn't override ring. */
+}
+
+.cardDropAfter {
+  /* Drop indicator is drawn via pseudo-element so it doesn't override ring. */
+}
+
+.cardDropBefore::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 0;
+  height: 0;
+  border-top: 2px solid rgba(120, 170, 255, 0.9);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  pointer-events: none;
+}
+
+.cardDropAfter::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 0;
+  height: 0;
+  border-bottom: 2px solid rgba(120, 170, 255, 0.9);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  pointer-events: none;
 }
 
 .cardTitleRow {
@@ -178,6 +218,51 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.dragHandle {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: rgba(255, 255, 255, 0.70);
+  flex: 0 0 auto;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.dragHandle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dragHandle:focus-visible {
+  outline: 2px solid rgba(120, 170, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.gripIcon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.card:focus-within {
+  outline: none;
+}
+
+.cardTop {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .cardTitle {

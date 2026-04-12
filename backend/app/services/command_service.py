@@ -56,3 +56,18 @@ class CommandService:
 
     def delete(self, command_id: int) -> bool:
         return self._repo.delete(command_id)
+
+    def reorder(self, by_category: dict[Category, list[int]]) -> None:
+        # Basic validation - full coverage per category is enforced in the repo.
+        for category, ids in by_category.items():
+            if not ids:
+                # Allow empty payload only if category truly has no commands,
+                # which will be verified against the DB.
+                continue
+            if len(ids) != len(set(ids)):
+                raise ValidationError(f"Duplicate command id in {category.value} ordering")
+
+        try:
+            self._repo.reorder(by_category)
+        except ValueError as e:
+            raise ValidationError(str(e)) from e

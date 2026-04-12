@@ -7,6 +7,79 @@ from pathlib import Path
 from app.core.config import SETTINGS
 
 
+def _table_has_column(conn: sqlite3.Connection, *, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(str(r[1]) == column for r in rows)
+
+
+def _ensure_commands_sort_index(conn: sqlite3.Connection) -> None:
+    """Ensure the `commands.sort_index` column exists and is initialized.
+
+    The project intentionally has no migrations framework in v1. We therefore do a
+    small, safe, idempotent schema upgrade at startup.
+
+    Behavior:
+    - If the column is missing, it's added with DEFAULT 0.
+    - Any commands with sort_index==0 are backfilled per-category preserving the
+      *current* visual order (created_at DESC, id DESC).
+    - If a category is partially initialized (some rows already non-zero), any
+      remaining zeros are appended after the current max sort_index.
+    """
+
+    if not _table_has_column(conn, table="commands", column="sort_index"):
+        # Existing rows will receive DEFAULT 0.
+        conn.execute(
+            "ALTER TABLE commands ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0"
+        )
+
+    # Index helps list/reorder operations.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_commands_category_sort "
+        "ON commands(category, sort_index, id)"
+    )
+
+    # Backfill only when needed; keep any existing non-zero ordering.
+    categories = [
+        str(r[0])
+        for r in conn.execute("SELECT DISTINCT category FROM commands").fetchall()
+    ]
+    for cat in categories:
+        stats = conn.execute(
+            "SELECT COUNT(*) AS total, SUM(CASE WHEN sort_index = 0 THEN 1 ELSE 0 END) AS zeros "
+            "FROM commands WHERE category = ?",
+            (cat,),
+        ).fetchone()
+        total = int(stats[0])
+        zeros = int(stats[1] or 0)
+        if total == 0 or zeros == 0:
+            continue
+
+        start = int(
+            conn.execute(
+                "SELECT COALESCE(MAX(sort_index), 0) FROM commands WHERE category = ?",
+                (cat,),
+            ).fetchone()[0]
+        )
+        # If everything is 0, `start` will be 0 and we'll preserve the current
+        # visual ordering.
+        next_index = start + 1
+
+        rows = conn.execute(
+            "SELECT id FROM commands "
+            "WHERE category = ? AND sort_index = 0 "
+            "ORDER BY created_at DESC, id DESC",
+            (cat,),
+        ).fetchall()
+        for r in rows:
+            conn.execute(
+                "UPDATE commands SET sort_index = ? WHERE id = ?",
+                (next_index, int(r[0])),
+            )
+            next_index += 1
+
+    conn.commit()
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     """Create the v1 schema if it doesn't exist.
 
@@ -20,6 +93,7 @@ def init_db(conn: sqlite3.Connection) -> None:
           title TEXT NOT NULL,
           category TEXT NOT NULL,
           status TEXT NOT NULL,
+          sort_index INTEGER NOT NULL,
           created_at INTEGER NOT NULL
         );
         """.strip())
@@ -27,6 +101,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_commands_category ON commands(category);"
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);")
+
+    _ensure_commands_sort_index(conn)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS outcomes (

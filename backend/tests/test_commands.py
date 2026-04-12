@@ -170,3 +170,87 @@ def test_fastapi_request_validation_errors_are_mapped_to_400(client) -> None:
     resp = client.post("/api/commands", json={"title": "X"})
     assert resp.status_code == 400
     assert resp.json() == {"error": "Invalid request"}
+
+
+def test_reorder_commands_persists_ordering_within_and_across_categories(client) -> None:
+    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
+    d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
+    b1 = client.post("/api/commands", json={"title": "B1", "category": "Build"}).json()
+
+    # Initial order: append-to-bottom; list endpoint should return in that order.
+    items = client.get("/api/commands?category=Design").json()
+    assert [c["id"] for c in items] == [d1["id"], d2["id"]]
+
+    # Move d2 above d1 (within category) and move b1 into Design at the end.
+    reorder = client.post(
+        "/api/commands/reorder",
+        json={
+            "by_category": {
+                "Design": [d2["id"], d1["id"], b1["id"]],
+                "Build": [],
+            }
+        },
+    )
+    assert reorder.status_code == 200
+    assert reorder.json() == {"ok": True}
+
+    # Persisted order should be reflected on list.
+    items2 = client.get("/api/commands?category=Design").json()
+    assert [c["id"] for c in items2] == [d2["id"], d1["id"], b1["id"]]
+    items3 = client.get("/api/commands?category=Build").json()
+    assert items3 == []
+
+
+def test_reorder_commands_invalid_category_is_400(client) -> None:
+    resp = client.post("/api/commands/reorder", json={"by_category": {"Nope": []}})
+    assert resp.status_code == 400
+    assert resp.json() == {"error": "Invalid category"}
+
+
+def test_reorder_commands_requires_full_coverage(client) -> None:
+    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
+    d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
+
+    # Missing one id should fail.
+    resp = client.post(
+        "/api/commands/reorder",
+        json={"by_category": {"Design": [d1["id"]]}},
+    )
+    assert resp.status_code == 400
+
+
+def test_reorder_commands_duplicate_ids_is_400(client) -> None:
+    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
+    resp = client.post(
+        "/api/commands/reorder",
+        json={"by_category": {"Design": [d1["id"], d1["id"]]}},
+    )
+    assert resp.status_code == 400
+
+
+def test_reorder_commands_empty_payload_is_ok(client) -> None:
+    resp = client.post("/api/commands/reorder", json={"by_category": {}})
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_list_commands_is_ordered_within_category(client) -> None:
+    # Build will come before Design due to category ordering in SQL, but we
+    # mainly assert the within-category order is stable and respects sort_index.
+    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
+    d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
+    b1 = client.post("/api/commands", json={"title": "B1", "category": "Build"}).json()
+
+    # Reorder within Design.
+    ok = client.post(
+        "/api/commands/reorder",
+        json={"by_category": {"Design": [d2["id"], d1["id"]]}},
+    )
+    assert ok.status_code == 200
+
+    items = client.get("/api/commands").json()
+    design = [c for c in items if c["category"] == "Design"]
+    assert [c["id"] for c in design] == [d2["id"], d1["id"]]
+
+    build = [c for c in items if c["category"] == "Build"]
+    assert [c["id"] for c in build] == [b1["id"]]

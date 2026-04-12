@@ -4,6 +4,7 @@ import type { Category, Command, Status } from "../../api/commands";
 import {
   deleteCommand,
   listCommands,
+  reorderCommands,
   updateCommand,
 } from "../../api/commands";
 import { isHttpError } from "../../api/http";
@@ -40,6 +41,12 @@ export function Board() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<
+    | { category: Category; beforeId: number | null; afterId: number | null }
+    | null
+  >(null);
+
   const [activeSession, setActiveSession] = useState<SessionActive>({ active: false });
   const [latestByCategory, setLatestByCategory] = useState<LatestSessionsByCategory>({
     Design: null,
@@ -61,6 +68,40 @@ export function Board() {
     }
     return map;
   }, [commands]);
+
+  function computeInsertIndex(
+    list: Command[],
+    beforeId: number | null,
+    afterId: number | null
+  ): number {
+    if (beforeId !== null) {
+      const i = list.findIndex((c) => c.id === beforeId);
+      return i >= 0 ? i : list.length;
+    }
+    if (afterId !== null) {
+      const i = list.findIndex((c) => c.id === afterId);
+      return i >= 0 ? i + 1 : list.length;
+    }
+    return list.length;
+  }
+
+  function buildReorderPayload(next: Command[]): Record<Category, number[]> {
+    const by: Record<Category, number[]> = {
+      Design: [],
+      Build: [],
+      Review: [],
+      Maintain: [],
+      Recover: [],
+    };
+    for (const c of next) by[c.category].push(c.id);
+    return by;
+  }
+
+  async function commitReorder(next: Command[]): Promise<void> {
+    // Persist ordering for all categories (simplest correctness; small dataset).
+    const by_category = buildReorderPayload(next);
+    await reorderCommands({ by_category });
+  }
 
   async function refresh(): Promise<void> {
     setError(null);
@@ -116,6 +157,123 @@ export function Board() {
       await refresh();
     } catch (e) {
       const msg = isHttpError(e) ? e.message : "Could not delete command";
+      setError(msg);
+    }
+  }
+
+  function gripSvg() {
+    // Minimal grip icon (6 dots) - no external deps.
+    return (
+      <svg
+        className={styles.gripIcon}
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="5" cy="4" r="1.2" />
+        <circle cx="11" cy="4" r="1.2" />
+        <circle cx="5" cy="8" r="1.2" />
+        <circle cx="11" cy="8" r="1.2" />
+        <circle cx="5" cy="12" r="1.2" />
+        <circle cx="11" cy="12" r="1.2" />
+      </svg>
+    );
+  }
+
+  function onGripDragStart(e: React.DragEvent, cmd: Command): void {
+    e.stopPropagation();
+    setDraggingId(cmd.id);
+    setDropTarget(null);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(cmd.id));
+  }
+
+  function onGripDragEnd(): void {
+    setDraggingId(null);
+    setDropTarget(null);
+  }
+
+  function onCardDragOver(
+    e: React.DragEvent,
+    category: Category,
+    cmd: Command
+  ): void {
+    if (draggingId === null) return;
+    // Don't show an insertion marker on top of the item being dragged.
+    if (cmd.id === draggingId) {
+      setDropTarget(null);
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    setDropTarget({
+      category,
+      beforeId: before ? cmd.id : null,
+      afterId: before ? null : cmd.id,
+    });
+  }
+
+  function onColumnDragOver(e: React.DragEvent, category: Category): void {
+    if (draggingId === null) return;
+    // Only handle "background" drag-over events; card-level handlers set
+    // precise insertion targets.
+    if (e.target !== e.currentTarget) return;
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    // If we're over the column but not a specific card, append to bottom.
+    setDropTarget({ category, beforeId: null, afterId: null });
+  }
+
+  async function onDrop(e: React.DragEvent): Promise<void> {
+    if (draggingId === null || dropTarget === null) return;
+    e.preventDefault();
+
+    const moving = commands.find((c) => c.id === draggingId);
+    if (!moving) return;
+
+    const prev = commands;
+    const without = prev.filter((c) => c.id !== draggingId);
+    const targetList = without.filter((c) => c.category === dropTarget.category);
+    const insertIndex = computeInsertIndex(
+      targetList,
+      dropTarget.beforeId,
+      dropTarget.afterId
+    );
+
+    const moved: Command = { ...moving, category: dropTarget.category };
+    const nextTarget = [
+      ...targetList.slice(0, insertIndex),
+      moved,
+      ...targetList.slice(insertIndex),
+    ];
+
+    // Rebuild full list preserving other categories.
+    const next: Command[] = [];
+    for (const cat of CATEGORIES) {
+      if (cat === dropTarget.category) {
+        next.push(...nextTarget);
+      } else {
+        next.push(...without.filter((c) => c.category === cat));
+      }
+    }
+
+    // Optimistic UI.
+    setCommands(next);
+    setDraggingId(null);
+    setDropTarget(null);
+
+    try {
+      await commitReorder(next);
+      await refresh();
+    } catch (err) {
+      setCommands(prev);
+      const msg = isHttpError(err) ? err.message : "Could not reorder commands";
       setError(msg);
     }
   }
@@ -263,7 +421,11 @@ export function Board() {
               </div>
             ) : null}
 
-            <div className={styles.cards}>
+            <div
+              className={styles.cards}
+              onDragOver={(e) => onColumnDragOver(e, category)}
+              onDrop={(e) => void onDrop(e)}
+            >
               {(commandsByCategory.get(category) ?? []).length === 0 ? (
                 <div className={styles.empty}>No commands yet</div>
               ) : null}
@@ -271,12 +433,40 @@ export function Board() {
               {(commandsByCategory.get(category) ?? []).map((cmd) => (
                 <div
                   key={cmd.id}
-                  className={styles.card}
+                  className={`${styles.card} ${
+                    draggingId === cmd.id ? styles.cardDragging : ""
+                  } ${
+                    dropTarget?.category === category && dropTarget.beforeId === cmd.id
+                      ? styles.cardDropBefore
+                      : ""
+                  } ${
+                    dropTarget?.category === category && dropTarget.afterId === cmd.id
+                      ? styles.cardDropAfter
+                      : ""
+                  }`}
                   onClick={() => setSelected(cmd)}
+                  onDragOver={(e) => onCardDragOver(e, category, cmd)}
+                  onDrop={(e) => {
+                    e.stopPropagation();
+                    void onDrop(e);
+                  }}
                 >
                   <div className={styles.cardTop}>
                     <div className={styles.cardTitleRow}>
                       <span className={styles.cardTitle}>{cmd.title}</span>
+                      <button
+                        type="button"
+                        className={styles.dragHandle}
+                        draggable
+                        aria-label="Reorder"
+                        title="Drag to reorder"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        onDragStart={(e) => onGripDragStart(e, cmd)}
+                        onDragEnd={onGripDragEnd}
+                      >
+                        {gripSvg()}
+                      </button>
                       <span
                         className={`${styles.statusDot} ${statusClass(cmd.status)}`}
                         aria-label={`Status: ${cmd.status}`}
