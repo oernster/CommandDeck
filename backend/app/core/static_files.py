@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+from fastapi.staticfiles import StaticFiles
+
 
 def _runtime_root_dir() -> Path:
     """Return the runtime root directory.
@@ -59,3 +61,23 @@ def frontend_dist_dir() -> Path:
     # Default guess (may not exist).
     root = _runtime_root_dir()
     return root / "frontend" / "dist"
+
+
+class AssetsStaticFiles(StaticFiles):
+    """Static file handler for Vite hashed build assets.
+
+    Vite emits content-hashed filenames under `/assets/*`. Those responses are
+    immutable and safe to cache for a long time.
+
+    We set the header here (at the static-serving boundary) instead of using a
+    global middleware so non-asset routes keep their default caching behavior.
+    """
+
+    _CACHE_CONTROL_VALUE = "public, max-age=31536000, immutable"
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            # Override any default Cache-Control set by Starlette.
+            response.headers["Cache-Control"] = self._CACHE_CONTROL_VALUE
+        return response

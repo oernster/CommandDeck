@@ -7,6 +7,10 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 
 
+NO_CACHE_HTML_VALUE = "no-store, no-cache, must-revalidate"
+ASSETS_CACHE_VALUE = "public, max-age=31536000, immutable"
+
+
 def test_static_serving_disabled_when_dist_missing(monkeypatch) -> None:
     # `frontend/dist` may exist locally if the user has built the frontend.
     # Force static serving *off* by pointing to a non-existent directory.
@@ -37,19 +41,23 @@ def test_static_serving_index_assets_and_spa_fallback(
         index = client.get("/")
         assert index.status_code == 200
         assert "text/html" in index.headers.get("content-type", "")
-        assert index.headers.get("cache-control") == "no-store"
+        assert index.headers.get("cache-control") == NO_CACHE_HTML_VALUE
+        assert index.headers.get("pragma") == "no-cache"
+        assert index.headers.get("expires") == "0"
         assert "OK" in index.text
 
         asset = client.get("/assets/app.js")
         assert asset.status_code == 200
         assert "console.log" in asset.text
-        assert asset.headers.get("cache-control") == "public, max-age=31536000, immutable"
+        assert asset.headers.get("cache-control") == ASSETS_CACHE_VALUE
 
         # SPA fallback should return index.html for unknown client routes.
         fallback = client.get("/some/client/route")
         assert fallback.status_code == 200
         assert "OK" in fallback.text
-        assert fallback.headers.get("cache-control") == "no-store"
+        assert fallback.headers.get("cache-control") == NO_CACHE_HTML_VALUE
+        assert fallback.headers.get("pragma") == "no-cache"
+        assert fallback.headers.get("expires") == "0"
 
 
 def test_static_serving_index_without_assets_dir(tmp_path: Path, monkeypatch) -> None:
@@ -66,10 +74,14 @@ def test_static_serving_index_without_assets_dir(tmp_path: Path, monkeypatch) ->
         index = client.get("/")
         assert index.status_code == 200
         assert "NOASSETS" in index.text
-        assert index.headers.get("cache-control") == "no-store"
+        assert index.headers.get("cache-control") == NO_CACHE_HTML_VALUE
+        assert index.headers.get("pragma") == "no-cache"
+        assert index.headers.get("expires") == "0"
 
         # No assets directory: requests under /assets fall through to the SPA fallback.
         asset = client.get("/assets/app.js")
         assert asset.status_code == 200
         assert "NOASSETS" in asset.text
-        assert asset.headers.get("cache-control") == "no-store"
+        assert asset.headers.get("cache-control") == NO_CACHE_HTML_VALUE
+        assert asset.headers.get("pragma") == "no-cache"
+        assert asset.headers.get("expires") == "0"

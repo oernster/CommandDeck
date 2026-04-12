@@ -21,11 +21,23 @@ def _runtime_root() -> str:
     In source/dev/test, this is the repo root.
     In frozen/runtime installs, this is the directory containing the EXE.
     """
+    # Prefer detecting the actual CommandDeck.exe path even when the process is
+    # not marked as frozen (some packaging/launch contexts can misreport it).
+    try:
+        argv0 = str(sys.argv[0]) if sys.argv else ""
+        exe_name = os.path.basename(argv0).lower()
+        if exe_name == "commanddeck.exe":
+            return os.path.dirname(os.path.abspath(argv0))
+    except Exception:
+        # Fall through to frozen / repo-root logic.
+        pass
+
     try:
         if getattr(sys, "frozen", False):
             return os.path.dirname(os.path.abspath(sys.argv[0]))
     except Exception:
         pass
+
     return _repo_root()
 
 
@@ -48,7 +60,13 @@ def _default_sqlite_path() -> str:
     try:
         argv0 = str(sys.argv[0]) if sys.argv else ""
         exe_name = os.path.basename(argv0).lower()
-        if getattr(sys, "frozen", False) or exe_name == "commanddeck.exe":
+        is_frozen = bool(getattr(sys, "frozen", False))
+        # Do not require the file to exist: tests and some launch contexts may
+        # provide an argv0 that points at the intended EXE path before it exists
+        # (or in a synthetic environment).
+        is_runtime_exe = exe_name == "commanddeck.exe"
+
+        if is_frozen or is_runtime_exe:
             return os.path.join(_runtime_root(), "command_deck.db")
     except Exception:
         pass

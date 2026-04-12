@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Category, Status } from "../../api/commands";
 import { createCommand } from "../../api/commands";
 import { isHttpError } from "../../api/http";
-import { CATEGORIES, STATUSES } from "./constants";
+import { STATUSES } from "./constants";
 
 import styles from "./CreateCommandModal.module.css";
 
@@ -18,7 +18,7 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
   const { initialCategory, onClose, onCreated, setError } = props;
 
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<Category>(initialCategory);
+  const [category] = useState<Category>(initialCategory);
   const [status, setStatus] = useState<Status>("Not Started");
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
@@ -83,22 +83,7 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What needs doing?"
               maxLength={200}
-            />
-          </div>
-
-          <div className={styles.row}>
-            <span className={styles.label}>Category</span>
-            <select
-              className={styles.select}
-              value={category}
-              onChange={(e) => setCategory(e.target.value as Category)}
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+              />
           </div>
 
           <div className={styles.row}>

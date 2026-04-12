@@ -122,6 +122,9 @@ def test_config_runtime_root_returns_exe_dir_when_frozen(monkeypatch, tmp_path: 
     monkeypatch.setattr(sys, "argv", [str(exe)], raising=True)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
 
+    # Ensure the frozen branch is exercised (the exe-name branch runs first).
+    monkeypatch.setattr(config.os.path, "basename", lambda _: "python.exe", raising=True)
+
     assert config._runtime_root() == str(tmp_path)
 
 
@@ -133,6 +136,23 @@ def test_config_runtime_root_handles_exception_and_falls_back(monkeypatch) -> No
     out = config._runtime_root()
     assert isinstance(out, str)
     assert out
+
+
+def test_config_runtime_root_handles_argv0_str_exception(monkeypatch) -> None:
+    """Cover the defensive `except` in the argv0/exe-name probe inside `_runtime_root()`."""
+
+    class _BadStr:
+        def __str__(self) -> str:  # noqa: D401
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(sys, "argv", [_BadStr()], raising=True)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+
+    out = config._runtime_root()
+    assert isinstance(out, str)
+    assert out
+    # In source mode this should resolve to the repo root that contains backend/.
+    assert (Path(out) / "backend").is_dir()
 
 
 def test_config_runtime_root_uses_repo_root_when_not_frozen(monkeypatch) -> None:
@@ -182,6 +202,14 @@ def test_default_sqlite_path_respects_override_env(monkeypatch) -> None:
     monkeypatch.setenv("COMMANDDECK_SQLITE_PATH", "C:/tmp/override.db")
     out = config._default_sqlite_path()
     assert out.replace("\\", "/").endswith("/tmp/override.db")
+
+
+def test_config_runtime_root_prefers_commanddeck_exe_even_when_not_frozen(monkeypatch, tmp_path: Path) -> None:
+    # Cover the argv0 exe-name branch in `_runtime_root()`.
+    exe = tmp_path / "CommandDeck.exe"
+    monkeypatch.setattr(sys, "argv", [str(exe)], raising=True)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    assert config._runtime_root() == str(tmp_path)
 
 
 def test_default_sqlite_path_handles_exe_check_exception(monkeypatch, tmp_path: Path) -> None:

@@ -8,14 +8,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.api.commands import router as commands_router
 from app.api.health import router as health_router
 from app.api.outcomes import router as outcomes_router
 from app.api.sessions import router as sessions_router
 from app.core.lifecycle import init_database_file
-from app.core.static_files import frontend_dist_dir
+from app.core.static_files import AssetsStaticFiles, frontend_dist_dir
 from app.domain.errors import NotFoundError, ValidationError
 from app.version import VERSION
 
@@ -31,10 +30,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(title="Command Deck", version=VERSION, lifespan=lifespan)
 
-    no_store_headers = {
-        # Ensure the browser always revalidates API + HTML so updates and data
-        # changes are reflected without hard refresh.
-        "Cache-Control": "no-store",
+    no_cache_html_headers = {
+        # HTML app shell must never be cached. Otherwise a browser can reuse a stale
+        # `index.html` that points at old hashed assets, producing stale UI/state
+        # after upgrades.
+        "Cache-Control": "no-store, no-cache, must-revalidate",
         "Pragma": "no-cache",
         "Expires": "0",
     }
@@ -62,31 +62,21 @@ def create_app() -> FastAPI:
     app.include_router(sessions_router)
 
     @app.middleware("http")
-    async def _cache_control(request: Request, call_next):
+    async def _api_cache_control(request: Request, call_next):
+        """Prevent caching for API responses only.
+
+        Static caching behavior for the frontend is handled at the relevant
+        boundaries:
+        - `/assets/*` via `AssetsStaticFiles`
+        - `/` and SPA fallback via explicit `FileResponse(headers=...)`
+        """
+
         response = await call_next(request)
-        path = request.url.path
-
-        if path.startswith("/assets/") and response.status_code == 200:
-            # Vite uses content-hashed filenames under /assets, so we can cache
-            # these aggressively.
-            response.headers.setdefault(
-                "Cache-Control",
-                "public, max-age=31536000, immutable",
-            )
-            return response
-
-        if path.startswith("/api/"):
+        if request.url.path.startswith("/api/"):
             # Never cache API responses; avoids browsers serving stale data.
-            for k, v in no_store_headers.items():
-                response.headers.setdefault(k, v)
-            return response
-
-        # HTML routes (/, SPA fallback) should not be cached so they always pick
-        # up the latest asset hashes.
-        content_type = response.headers.get("content-type", "")
-        if response.status_code == 200 and content_type.startswith("text/html"):
-            for k, v in no_store_headers.items():
-                response.headers.setdefault(k, v)
+            response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault("Pragma", "no-cache")
+            response.headers.setdefault("Expires", "0")
         return response
 
     dist_dir = frontend_dist_dir()
@@ -97,7 +87,7 @@ def create_app() -> FastAPI:
         if assets_dir.is_dir():
             app.mount(
                 "/assets",
-                StaticFiles(
+                AssetsStaticFiles(
                     directory=str(assets_dir),
                     html=False,
                     check_dir=True,
@@ -107,12 +97,12 @@ def create_app() -> FastAPI:
 
         @app.get("/")
         def _index() -> FileResponse:
-            return FileResponse(str(index_html), headers=no_store_headers)
+            return FileResponse(str(index_html), headers=no_cache_html_headers)
 
         # SPA fallback: let the frontend handle client-side routes.
         @app.get("/{path:path}")
         def _spa_fallback(path: str) -> FileResponse:  # noqa: ARG001
-            return FileResponse(str(index_html), headers=no_store_headers)
+            return FileResponse(str(index_html), headers=no_cache_html_headers)
 
     return app
 
