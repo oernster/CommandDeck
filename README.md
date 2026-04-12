@@ -1,4 +1,4 @@
-# Command Deck
+# 🟢 Command Deck
 
 Command Deck is an operational system for issuing intent, tracking execution, and recording outcomes.
 
