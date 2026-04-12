@@ -9,5 +9,3 @@ Keep this version in sync with the top-level VERSION file created by
 """
 
 VERSION = "1.0.0"
-
-

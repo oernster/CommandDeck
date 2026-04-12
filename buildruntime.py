@@ -18,7 +18,6 @@ import sys
 from pathlib import Path
 from typing import List
 
-
 APP_NAME = "Command Deck"
 APP_ID = "CommandDeck"
 RUNTIME_EXE_NAME = "CommandDeck"
@@ -177,4 +176,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

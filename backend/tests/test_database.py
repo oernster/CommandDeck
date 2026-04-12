@@ -72,8 +72,7 @@ def test_init_db_upgrades_existing_commands_table_without_sort_index(tmp_path) -
     conn.execute("PRAGMA foreign_keys = ON;")
 
     # Simulate an older schema (no sort_index).
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE commands (
           id INTEGER PRIMARY KEY,
           title TEXT NOT NULL,
@@ -81,15 +80,20 @@ def test_init_db_upgrades_existing_commands_table_without_sort_index(tmp_path) -
           status TEXT NOT NULL,
           created_at INTEGER NOT NULL
         );
-        """.strip()
-    )
+        """.strip())
     # Insert 2 commands in Design in the legacy ordering (created_at DESC).
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, created_at) VALUES (?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, created_at) "
+            "VALUES (?,?,?,?,?)"
+        ),
         (1, "A", "Design", "Not Started", 10),
     )
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, created_at) VALUES (?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, created_at) "
+            "VALUES (?,?,?,?,?)"
+        ),
         (2, "B", "Design", "Not Started", 11),
     )
     conn.commit()
@@ -116,8 +120,7 @@ def test_init_db_backfill_appends_when_partially_initialized(tmp_path) -> None:
     conn.execute("PRAGMA foreign_keys = ON;")
 
     # Legacy commands table.
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE commands (
           id INTEGER PRIMARY KEY,
           title TEXT NOT NULL,
@@ -125,18 +128,23 @@ def test_init_db_backfill_appends_when_partially_initialized(tmp_path) -> None:
           status TEXT NOT NULL,
           created_at INTEGER NOT NULL
         );
-        """.strip()
-    )
+        """.strip())
     # Pretend an external tool already added sort_index and set one row.
     conn.execute(
         "ALTER TABLE commands ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0"
     )
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, sort_index, "
+            "created_at) VALUES (?,?,?,?,?,?)"
+        ),
         (1, "Existing", "Build", "Not Started", 5, 100),
     )
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, sort_index, "
+            "created_at) VALUES (?,?,?,?,?,?)"
+        ),
         (2, "NeedsBackfill", "Build", "Not Started", 0, 101),
     )
     conn.commit()
@@ -160,8 +168,7 @@ def test_init_db_no_backfill_when_all_sort_index_initialized(tmp_path) -> None:
     conn.execute("PRAGMA foreign_keys = ON;")
 
     # Legacy-ish table with sort_index already present.
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE commands (
           id INTEGER PRIMARY KEY,
           title TEXT NOT NULL,
@@ -170,14 +177,19 @@ def test_init_db_no_backfill_when_all_sort_index_initialized(tmp_path) -> None:
           created_at INTEGER NOT NULL,
           sort_index INTEGER NOT NULL DEFAULT 0
         );
-        """.strip()
-    )
+        """.strip())
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, sort_index, "
+            "created_at) VALUES (?,?,?,?,?,?)"
+        ),
         (1, "A", "Review", "Not Started", 1, 1),
     )
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, sort_index, "
+            "created_at) VALUES (?,?,?,?,?,?)"
+        ),
         (2, "B", "Review", "Not Started", 2, 2),
     )
     conn.commit()
@@ -207,11 +219,17 @@ def test_command_repository_reorder_duplicate_ids_raises_value_error(tmp_path) -
 
     # Create two valid commands.
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, sort_index, "
+            "created_at) VALUES (?,?,?,?,?,?)"
+        ),
         (1, "A", "Design", "Not Started", 1, 1),
     )
     conn.execute(
-        "INSERT INTO commands (id, title, category, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        (
+            "INSERT INTO commands (id, title, category, status, sort_index, "
+            "created_at) VALUES (?,?,?,?,?,?)"
+        ),
         (2, "B", "Design", "Not Started", 2, 2),
     )
     conn.commit()
@@ -341,7 +359,9 @@ def test_connect_creates_parent_dir_when_missing(tmp_path) -> None:
         conn.close()
 
 
-def test_init_database_file_creates_parent_dir_when_missing(tmp_path, monkeypatch) -> None:
+def test_init_database_file_creates_parent_dir_when_missing(
+    tmp_path, monkeypatch
+) -> None:
     from app.core import config
     from app.core.lifecycle import init_database_file
 
@@ -355,7 +375,9 @@ def test_init_database_file_creates_parent_dir_when_missing(tmp_path, monkeypatc
         config.SETTINGS = original
 
 
-def test_init_database_file_dir_creation_except_path_is_defensive(monkeypatch, tmp_path) -> None:
+def test_init_database_file_dir_creation_except_path_is_defensive(
+    monkeypatch, tmp_path
+) -> None:
     from app.core import config
     from app.core.lifecycle import init_database_file
 
@@ -363,6 +385,7 @@ def test_init_database_file_dir_creation_except_path_is_defensive(monkeypatch, t
     original = config.SETTINGS
     config.SETTINGS = config.Settings(sqlite_path=db_path)
     try:
+
         def _boom(*_args, **_kwargs):  # noqa: ANN001
             raise RuntimeError("boom")
 

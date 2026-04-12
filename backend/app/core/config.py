@@ -93,9 +93,7 @@ class Settings:
     port: int = 8001
     # Use an explicit repo-rooted path so tests and app runtime agree regardless
     # of current working directory.
-    sqlite_path: str = field(
-        default_factory=_default_sqlite_path
-    )
+    sqlite_path: str = field(default_factory=_default_sqlite_path)
 
 
 SETTINGS = Settings()

@@ -172,7 +172,9 @@ def test_fastapi_request_validation_errors_are_mapped_to_400(client) -> None:
     assert resp.json() == {"error": "Invalid request"}
 
 
-def test_reorder_commands_persists_ordering_within_and_across_categories(client) -> None:
+def test_reorder_commands_persists_ordering_within_and_across_categories(
+    client,
+) -> None:
     d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
     d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
     b1 = client.post("/api/commands", json={"title": "B1", "category": "Build"}).json()
@@ -209,7 +211,7 @@ def test_reorder_commands_invalid_category_is_400(client) -> None:
 
 def test_reorder_commands_requires_full_coverage(client) -> None:
     d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
-    d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
+    client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
 
     # Missing one id should fail.
     resp = client.post(

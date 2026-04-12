@@ -20,7 +20,6 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-
 APP_NAME = "Command Deck"
 APP_ID = "CommandDeck"
 HOST = "127.0.0.1"
@@ -311,7 +310,9 @@ def _load_tray_icon() -> object:
         return object()
 
 
-def _run_tray(*, settings: RuntimeSettings, backend: BackendServer, no_browser: bool) -> int:
+def _run_tray(
+    *, settings: RuntimeSettings, backend: BackendServer, no_browser: bool
+) -> int:
     try:
         import pystray
     except Exception as exc:  # noqa: BLE001
@@ -399,4 +400,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

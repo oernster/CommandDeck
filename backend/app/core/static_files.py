@@ -77,7 +77,9 @@ class AssetsStaticFiles(StaticFiles):
 
     async def get_response(self, path: str, scope):  # type: ignore[override]
         response = await super().get_response(path, scope)
-        if response.status_code == 200:
-            # Override any default Cache-Control set by Starlette.
-            response.headers["Cache-Control"] = self._CACHE_CONTROL_VALUE
+        # Override any default Cache-Control set by Starlette.
+        #
+        # Note: for missing assets, Starlette raises an HTTPException instead of
+        # returning a Response, so this line only applies to successful responses.
+        response.headers["Cache-Control"] = self._CACHE_CONTROL_VALUE
         return response

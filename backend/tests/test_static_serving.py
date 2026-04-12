@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 
-
 NO_CACHE_HTML_VALUE = "no-store, no-cache, must-revalidate"
 ASSETS_CACHE_VALUE = "public, max-age=31536000, immutable"
 
@@ -50,6 +49,13 @@ def test_static_serving_index_assets_and_spa_fallback(
         assert asset.status_code == 200
         assert "console.log" in asset.text
         assert asset.headers.get("cache-control") == ASSETS_CACHE_VALUE
+
+        # Missing asset should not receive the immutable cache header.
+        missing = client.get("/assets/missing.js")
+        assert missing.status_code == 404
+        # For non-200 responses we do not enforce a particular cache-control value,
+        # we only assert that the immutable asset header is not force-set.
+        assert missing.headers.get("cache-control") != ASSETS_CACHE_VALUE
 
         # SPA fallback should return index.html for unknown client routes.
         fallback = client.get("/some/client/route")

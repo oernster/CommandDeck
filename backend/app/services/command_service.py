@@ -65,7 +65,9 @@ class CommandService:
                 # which will be verified against the DB.
                 continue
             if len(ids) != len(set(ids)):
-                raise ValidationError(f"Duplicate command id in {category.value} ordering")
+                raise ValidationError(
+                    f"Duplicate command id in {category.value} ordering"
+                )
 
         try:
             self._repo.reorder(by_category)

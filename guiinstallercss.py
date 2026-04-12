@@ -5,7 +5,6 @@ This file is intentionally kept architecturally identical to the
 EDColonisationAsst installer style module, with Command Deck branding.
 """
 
-
 # NOTE: These are mirrored from EDColonisationAsst/guiinstallercss.py to keep the
 # installer look-and-feel in the same family.
 
@@ -346,4 +345,3 @@ QPushButton#uninstallButton:pressed {
 }
 
 """
-

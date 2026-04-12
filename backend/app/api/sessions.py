@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.domain.enums import Category
 from app.domain.errors import ValidationError
-from app.domain.schemas import SessionLatestByCategory, SessionResponse, SessionStartRequest
+from app.domain.schemas import (
+    SessionLatestByCategory,
+    SessionResponse,
+    SessionStartRequest,
+)
 from app.repositories.session_repository import SessionRepository
 from app.services.session_service import SessionService
 

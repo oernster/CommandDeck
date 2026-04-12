@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 STANDARD_ICO_SIZES: tuple[int, ...] = (16, 24, 32, 40, 48, 64, 128, 256)
 
 
@@ -58,5 +57,6 @@ def ensure_windows_ico(ico_path: Path) -> None:
     if not sizes:
         raise RuntimeError(f"ICO validation failed; no embedded sizes in {ico_path}")
     if any(w != h for (w, h) in sizes):
-        raise RuntimeError(f"ICO validation failed; non-square sizes {sizes} in {ico_path}")
-
+        raise RuntimeError(
+            f"ICO validation failed; non-square sizes {sizes} in {ico_path}"
+        )

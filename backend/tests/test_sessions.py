@@ -112,7 +112,9 @@ def test_latest_by_category_after_start_and_switch(client) -> None:
     assert body["Build"]["ended_at"] is None
 
 
-def test_latest_by_category_picks_most_recent_when_multiple_for_same_category(client) -> None:
+def test_latest_by_category_picks_most_recent_when_multiple_for_same_category(
+    client,
+) -> None:
     s1 = client.post("/api/sessions/start", json={"category": "Design"}).json()
     client.post("/api/sessions/stop")
     s2 = client.post("/api/sessions/start", json={"category": "Design"}).json()

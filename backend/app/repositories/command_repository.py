@@ -48,7 +48,10 @@ class CommandRepository:
         # Newest commands should appear at the bottom of their category column.
         next_sort = int(
             self._conn.execute(
-                "SELECT COALESCE(MAX(sort_index), 0) + 1 FROM commands WHERE category = ?",
+                (
+                    "SELECT COALESCE(MAX(sort_index), 0) + 1 "
+                    "FROM commands WHERE category = ?"
+                ),
                 (category.value,),
             ).fetchone()[0]
         )
@@ -90,13 +93,26 @@ class CommandRepository:
         if new_category != existing.category:
             next_sort = int(
                 self._conn.execute(
-                    "SELECT COALESCE(MAX(sort_index), 0) + 1 FROM commands WHERE category = ?",
+                    (
+                        "SELECT COALESCE(MAX(sort_index), 0) + 1 "
+                        "FROM commands WHERE category = ?"
+                    ),
                     (new_category.value,),
                 ).fetchone()[0]
             )
             self._conn.execute(
-                "UPDATE commands SET title = ?, category = ?, status = ?, sort_index = ? WHERE id = ?",
-                (new_title, new_category.value, new_status.value, next_sort, command_id),
+                (
+                    "UPDATE commands SET title = ?, category = ?, status = ?, "
+                    "sort_index = ? "
+                    "WHERE id = ?"
+                ),
+                (
+                    new_title,
+                    new_category.value,
+                    new_status.value,
+                    next_sort,
+                    command_id,
+                ),
             )
         else:
             self._conn.execute(
@@ -149,7 +165,8 @@ class CommandRepository:
 
             if sorted(existing_ids) != sorted(payload_ids):
                 raise ValueError(
-                    "Reorder payload must include exactly all command ids for the affected categories"
+                    "Reorder payload must include exactly all command ids for the "
+                    "affected categories"
                 )
 
             # Apply final category + order.

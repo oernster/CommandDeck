@@ -48,13 +48,11 @@ class SessionRepository:
         Note: SQLite doesn't have a great portable DISTINCT ON equivalent. This
         implementation uses ordering (latest first) and reduces in Python.
         """
-        rows = self._conn.execute(
-            """
+        rows = self._conn.execute("""
             SELECT id, category, started_at, ended_at
             FROM sessions
             ORDER BY started_at DESC, id DESC
-            """.strip()
-        ).fetchall()
+            """.strip()).fetchall()
 
         latest: dict[str, Session] = {}
         for r in rows:

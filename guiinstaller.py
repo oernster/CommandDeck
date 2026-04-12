@@ -49,7 +49,6 @@ from PySide6.QtWidgets import (
 
 from guiinstallercss import DARK_QSS, LIGHT_QSS
 
-
 APP_NAME = "Command Deck"
 APP_ID = "CommandDeck"  # No spaces: used for paths/registry (ED installer pattern)
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -57,7 +56,9 @@ DEFAULT_PAYLOAD_DIR = PROJECT_ROOT / "build_payload"
 
 # Standard divider used in license/about text so all separator lines are the
 # same length and never wrap onto multiple lines.
-LICENSE_DIVIDER = "---------------------------------------------------------------------------"
+LICENSE_DIVIDER = (
+    "---------------------------------------------------------------------------"
+)
 
 RUNTIME_EXE_NAME = "CommandDeck.exe"
 INSTALLER_EXE_NAME = "CommandDeckInstaller.exe"
@@ -425,7 +426,9 @@ class InstallerWindow(QMainWindow):
         self.subtitle_label.setTextFormat(Qt.PlainText)
         self.subtitle_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.subtitle_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.subtitle_label.setMinimumHeight(QFontMetrics(self.subtitle_label.font()).height())
+        self.subtitle_label.setMinimumHeight(
+            QFontMetrics(self.subtitle_label.font()).height()
+        )
 
         header_layout = QHBoxLayout()
         header_text_layout = QVBoxLayout()
@@ -523,7 +526,9 @@ class InstallerWindow(QMainWindow):
         self.log_view = QTextEdit(self)
         self.log_view.setReadOnly(True)
         self.log_view.setMinimumHeight(120)
-        self.log_view.setStyleSheet("font-family: Consolas, monospace; font-size: 11px;")
+        self.log_view.setStyleSheet(
+            "font-family: Consolas, monospace; font-size: 11px;"
+        )
         self.log_view.hide()
 
         central.setLayout(layout)
@@ -541,7 +546,9 @@ class InstallerWindow(QMainWindow):
                 f"Installed version {self.installed_version} at {self.install_dir}"
             )
         else:
-            text = f"Installer version {self.version} · No existing installation detected"
+            text = (
+                f"Installer version {self.version} · No existing installation detected"
+            )
         self.subtitle_label.setText(text)
         self.subtitle_label.setToolTip(text)
         self._ensure_subtitle_fits_one_line(text)
@@ -694,7 +701,9 @@ class InstallerWindow(QMainWindow):
             )
         except Exception as exc:
             self._finish_progress("Install failed")
-            self._show_error("Install failed", f"Unexpected error during install:\n{exc}")
+            self._show_error(
+                "Install failed", f"Unexpected error during install:\n{exc}"
+            )
         finally:
             self.choose_dir_action.setEnabled(True)
 
@@ -736,7 +745,9 @@ class InstallerWindow(QMainWindow):
                         ),
                     )
 
-            self._log(f"Repairing installation at {self.install_dir} from {payload_root}")
+            self._log(
+                f"Repairing installation at {self.install_dir} from {payload_root}"
+            )
             total_files = self._count_files(payload_root)
             self._prepare_progress(total_files, "Repairing")
             self._copy_tree(payload_root, self.install_dir)
@@ -766,7 +777,9 @@ class InstallerWindow(QMainWindow):
             self._perform_uninstall(confirm=True)
         except Exception as exc:
             self._finish_progress("Uninstall failed")
-            self._show_error("Uninstall failed", f"Unexpected error during uninstall:\n{exc}")
+            self._show_error(
+                "Uninstall failed", f"Unexpected error during uninstall:\n{exc}"
+            )
         finally:
             self.choose_dir_action.setEnabled(True)
 
@@ -908,7 +921,10 @@ class InstallerWindow(QMainWindow):
 
         if not self.install_dir.exists():
             self._finish_progress("Uninstall failed")
-            self._show_error("Not installed", f"No existing installation found at:\n{self.install_dir}")
+            self._show_error(
+                "Not installed",
+                f"No existing installation found at:\n{self.install_dir}",
+            )
             return
 
         total_files = self._count_files(self.install_dir)
@@ -973,7 +989,9 @@ class InstallerWindow(QMainWindow):
                 winreg.KEY_SET_VALUE,
             ) as key:
                 if enabled:
-                    winreg.SetValueEx(key, WINDOWS_RUN_VALUE_NAME, 0, winreg.REG_SZ, cmd)
+                    winreg.SetValueEx(
+                        key, WINDOWS_RUN_VALUE_NAME, 0, winreg.REG_SZ, cmd
+                    )
                     self._log("Enabled auto-start on login (system tray).")
                 else:
                     try:
@@ -1013,7 +1031,9 @@ class InstallerWindow(QMainWindow):
         desktop_shortcut = desktop_dir / shortcut_name
 
         appdata = os.environ.get("APPDATA", "")
-        start_menu_root = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        start_menu_root = (
+            Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        )
         start_menu_dir = start_menu_root / APP_ID
         start_menu_shortcut = start_menu_dir / shortcut_name
         return desktop_shortcut, start_menu_shortcut
@@ -1029,11 +1049,15 @@ class InstallerWindow(QMainWindow):
         if not runtime_exe.exists():
             runtime_candidates: list[Path] = []
             try:
-                runtime_candidates.append(Path(__file__).resolve().parent / "runtime" / RUNTIME_EXE_NAME)
+                runtime_candidates.append(
+                    Path(__file__).resolve().parent / "runtime" / RUNTIME_EXE_NAME
+                )
             except Exception:
                 pass
             try:
-                runtime_candidates.append(Path(sys.argv[0]).resolve().parent / "runtime" / RUNTIME_EXE_NAME)
+                runtime_candidates.append(
+                    Path(sys.argv[0]).resolve().parent / "runtime" / RUNTIME_EXE_NAME
+                )
             except Exception:
                 pass
 
@@ -1050,13 +1074,17 @@ class InstallerWindow(QMainWindow):
                         recovered = True
                         break
                     except Exception as exc:
-                        self._log(f"Failed to recover runtime EXE from runtime data: {exc}")
+                        self._log(
+                            f"Failed to recover runtime EXE from runtime data: {exc}"
+                        )
 
             if not recovered:
                 payload_root = get_payload_root()
                 if payload_root is not None:
                     candidate = payload_root / RUNTIME_EXE_NAME
-                    self._log(f"Runtime EXE still missing; probing payload at: {candidate}")
+                    self._log(
+                        f"Runtime EXE still missing; probing payload at: {candidate}"
+                    )
                     if candidate.exists():
                         try:
                             shutil.copy2(candidate, runtime_exe)
@@ -1068,7 +1096,9 @@ class InstallerWindow(QMainWindow):
                             self._log(f"Failed to copy runtime EXE from payload: {exc}")
 
         if not runtime_exe.exists():
-            self._log("Runtime EXE not found after recovery attempts; skipping shortcut creation.")
+            self._log(
+                "Runtime EXE not found after recovery attempts; skipping shortcut creation."
+            )
             return
 
         target = runtime_exe
@@ -1084,7 +1114,9 @@ class InstallerWindow(QMainWindow):
             start_menu_shortcut.parent.mkdir(parents=True, exist_ok=True)
             self._create_single_shortcut(start_menu_shortcut, target, icon)
 
-    def _create_single_shortcut(self, shortcut_path: Path, target: Path, icon: Path) -> None:
+    def _create_single_shortcut(
+        self, shortcut_path: Path, target: Path, icon: Path
+    ) -> None:
         try:
             shortcut_path.parent.mkdir(parents=True, exist_ok=True)
             target_s = str(target)
@@ -1104,11 +1136,17 @@ class InstallerWindow(QMainWindow):
                 "$shortcut.Save();"
             )
 
-            kwargs = {"check": True, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+            kwargs = {
+                "check": True,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+            }
             if sys.platform.startswith("win"):
                 kwargs["creationflags"] = 0x08000000
 
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps_command], **kwargs)
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_command], **kwargs
+            )
             self._log(f"Created shortcut: {shortcut_path}")
         except Exception as exc:
             self._log(f"Failed to create shortcut {shortcut_path}: {exc}")
@@ -1145,7 +1183,9 @@ class InstallerWindow(QMainWindow):
             if not installer_copy.exists() or os.path.getsize(installer_copy) == 0:
                 self.install_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(exe_src, installer_copy)
-                self._log(f"Copied installer executable to {installer_copy} for uninstall integration.")
+                self._log(
+                    f"Copied installer executable to {installer_copy} for uninstall integration."
+                )
             exe_for_registry = installer_copy
         except Exception as exc:
             self._log(
@@ -1173,15 +1213,21 @@ class InstallerWindow(QMainWindow):
                 winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, APP_NAME)
                 winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, str(icon_path))
                 winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Oliver Ernster")
-                winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(self.install_dir))
+                winreg.SetValueEx(
+                    key, "InstallLocation", 0, winreg.REG_SZ, str(self.install_dir)
+                )
 
                 uninstall_cmd = f'"{exe_for_registry}"'
-                winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, uninstall_cmd)
+                winreg.SetValueEx(
+                    key, "UninstallString", 0, winreg.REG_SZ, uninstall_cmd
+                )
                 winreg.SetValueEx(key, "ModifyPath", 0, winreg.REG_SZ, uninstall_cmd)
                 winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 0)
                 winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 0)
                 if self.version:
-                    winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, self.version)
+                    winreg.SetValueEx(
+                        key, "DisplayVersion", 0, winreg.REG_SZ, self.version
+                    )
             self._log("Registered application in Windows Add/Remove Programs (HKCU).")
         except Exception as exc:
             self._log(f"Failed to register app in Add/Remove Programs: {exc}")
@@ -1330,4 +1376,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

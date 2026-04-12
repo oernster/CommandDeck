@@ -18,7 +18,6 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-
 SVG_NS = "http://www.w3.org/2000/svg"
 
 
@@ -157,4 +156,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

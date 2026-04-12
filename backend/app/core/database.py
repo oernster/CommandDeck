@@ -45,8 +45,11 @@ def _ensure_commands_sort_index(conn: sqlite3.Connection) -> None:
     ]
     for cat in categories:
         stats = conn.execute(
-            "SELECT COUNT(*) AS total, SUM(CASE WHEN sort_index = 0 THEN 1 ELSE 0 END) AS zeros "
-            "FROM commands WHERE category = ?",
+            (
+                "SELECT COUNT(*) AS total, "
+                "SUM(CASE WHEN sort_index = 0 THEN 1 ELSE 0 END) AS zeros "
+                "FROM commands WHERE category = ?"
+            ),
             (cat,),
         ).fetchone()
         total = int(stats[0])

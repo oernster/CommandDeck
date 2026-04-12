@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Build script for packaging the Command Deck GUI installer into a Windows EXE.
 
-    Mirrors the EDColonisationAsst build philosophy:
-    - Nuitka onefile packaging
-    - Bundled curated payload directory
-    - Bundled LICENSE + INSTALLER_LICENSE when present
-    - Explicit bundling of runtime EXE used by shortcuts: CommandDeck.exe
+Mirrors the EDColonisationAsst build philosophy:
+- Nuitka onefile packaging
+- Bundled curated payload directory
+- Bundled LICENSE + INSTALLER_LICENSE when present
+- Explicit bundling of runtime EXE used by shortcuts: CommandDeck.exe
 
-    Versioning:
-    - Single source of truth is backend/app/version.py
-    - We do not create or bundle a top-level VERSION file.
+Versioning:
+- Single source of truth is backend/app/version.py
+- We do not create or bundle a top-level VERSION file.
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import List
 
 from iconutil import ensure_windows_ico
-
 
 APP_NAME = "Command Deck"
 INSTALLER_NAME = "CommandDeckInstaller"
@@ -160,7 +159,9 @@ def _ensure_frontend_dist_built(project_root: Path) -> None:
         if not dist_dir.exists() or not any(dist_dir.iterdir()):
             raise RuntimeError("frontend/dist still missing/empty after build")
     except OSError as exc:
-        raise RuntimeError(f"Unable to inspect frontend/dist after build: {exc}") from exc
+        raise RuntimeError(
+            f"Unable to inspect frontend/dist after build: {exc}"
+        ) from exc
 
     print(f"[buildguiinstaller] Frontend production build ready at: {dist_dir}")
 
@@ -253,15 +254,15 @@ def _ensure_payload_dir(project_root: Path) -> Path:
     try:
         has_entries = any(payload_dir.iterdir())
     except OSError as exc:
-        raise RuntimeError(f"Unable to inspect payload directory '{payload_dir}': {exc}") from exc
+        raise RuntimeError(
+            f"Unable to inspect payload directory '{payload_dir}': {exc}"
+        ) from exc
 
     if not has_entries:
         raise RuntimeError(f"Bootstrapped payload directory '{payload_dir}' is empty.")
 
     print(f"[buildguiinstaller] Bootstrapped payload directory at: {payload_dir}")
     return payload_dir
-
-
 
 
 def main() -> int:
@@ -275,4 +276,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
