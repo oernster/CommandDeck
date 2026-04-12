@@ -76,3 +76,8 @@ class SessionResponse(BaseModel):
                 else None
             ),
         )
+
+
+# Keyed by category name ("Design", "Build", ...). Value is the latest session
+# for that category, or null if no session has ever been recorded.
+SessionLatestByCategory = dict[str, SessionResponse | None]

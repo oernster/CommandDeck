@@ -83,3 +83,40 @@ def test_start_missing_body_is_400_invalid_request(client) -> None:
     resp = client.post("/api/sessions/start", json={})
     assert resp.status_code == 400
     assert resp.json() == {"error": "Invalid request"}
+
+
+def test_latest_by_category_empty(client) -> None:
+    resp = client.get("/api/sessions/latest-by-category")
+    assert resp.status_code == 200
+    body = resp.json()
+    # All categories are present and null when no sessions exist.
+    assert set(body.keys()) == {"Design", "Build", "Review", "Maintain", "Recover"}
+    assert all(v is None for v in body.values())
+
+
+def test_latest_by_category_after_start_and_switch(client) -> None:
+    client.post("/api/sessions/start", json={"category": "Design"})
+    client.post("/api/sessions/start", json={"category": "Build"})
+
+    latest = client.get("/api/sessions/latest-by-category")
+    assert latest.status_code == 200
+    body = latest.json()
+
+    # Design exists and is ended (because starting Build ends any active session).
+    assert body["Design"] is not None
+    assert body["Design"]["started_at"].endswith("Z")
+    assert body["Design"]["ended_at"] is not None
+
+    # Build exists and is active.
+    assert body["Build"] is not None
+    assert body["Build"]["ended_at"] is None
+
+
+def test_latest_by_category_picks_most_recent_when_multiple_for_same_category(client) -> None:
+    s1 = client.post("/api/sessions/start", json={"category": "Design"}).json()
+    client.post("/api/sessions/stop")
+    s2 = client.post("/api/sessions/start", json={"category": "Design"}).json()
+
+    latest = client.get("/api/sessions/latest-by-category").json()
+    assert latest["Design"]["id"] == s2["id"]
+    assert latest["Design"]["id"] != s1["id"]

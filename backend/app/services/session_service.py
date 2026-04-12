@@ -32,3 +32,7 @@ class SessionService:
     def stop(self) -> Session | None:
         now = int(self._now_epoch_seconds())
         return self._repo.stop(now_epoch_seconds=now)
+
+    def latest_by_category(self) -> dict[Category, Session]:
+        latest = self._repo.latest_by_category()
+        return {s.category: s for s in latest}

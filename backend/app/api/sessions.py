@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.domain.enums import Category
 from app.domain.errors import ValidationError
-from app.domain.schemas import SessionResponse, SessionStartRequest
+from app.domain.schemas import SessionLatestByCategory, SessionResponse, SessionStartRequest
 from app.repositories.session_repository import SessionRepository
 from app.services.session_service import SessionService
 
@@ -44,6 +44,24 @@ def get_active_session(
     if session is None:
         return {"active": False}
     return SessionResponse.from_model(session)
+
+
+@router.get("/api/sessions/latest-by-category", response_model=SessionLatestByCategory)
+def latest_by_category(
+    conn: sqlite3.Connection = Depends(get_db),
+) -> SessionLatestByCategory:
+    """Return the latest session (active or ended) for every category.
+
+    Categories with no sessions are returned with a null value.
+    """
+    service = _service(conn)
+    latest = service.latest_by_category()
+
+    out: SessionLatestByCategory = {}
+    for c in Category:
+        session = latest.get(c)
+        out[c.value] = SessionResponse.from_model(session) if session else None
+    return out
 
 
 @router.post("/api/sessions/start", response_model=SessionResponse)

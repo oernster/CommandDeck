@@ -42,6 +42,30 @@ class SessionRepository:
             return None
         return self._row_to_session(row)
 
+    def latest_by_category(self) -> list[Session]:
+        """Return the latest session per category.
+
+        Note: SQLite doesn't have a great portable DISTINCT ON equivalent. This
+        implementation uses ordering (latest first) and reduces in Python.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT id, category, started_at, ended_at
+            FROM sessions
+            ORDER BY started_at DESC, id DESC
+            """.strip()
+        ).fetchall()
+
+        latest: dict[str, Session] = {}
+        for r in rows:
+            s = self._row_to_session(r)
+            # Rows are ordered newest-first, so first time we see a category is
+            # its latest session.
+            if s.category.value not in latest:
+                latest[s.category.value] = s
+
+        return list(latest.values())
+
     def start(self, category: Category, now_epoch_seconds: int) -> Session:
         """Stop any active session and start a new one in a single transaction."""
         self._conn.execute("BEGIN")

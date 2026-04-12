@@ -9,8 +9,13 @@ import {
 import { isHttpError } from "../../api/http";
 import { CATEGORIES, STATUSES } from "./constants";
 
-import { getActiveSession, startSession, stopSession } from "../../api/sessions";
-import type { SessionActive } from "../../api/sessions";
+import {
+  getActiveSession,
+  getLatestSessionsByCategory,
+  startSession,
+  stopSession,
+} from "../../api/sessions";
+import type { LatestSessionsByCategory, SessionActive } from "../../api/sessions";
 
 import { CreateCommandModal } from "./CreateCommandModal";
 import { CommandDrawer } from "./CommandDrawer";
@@ -36,6 +41,13 @@ export function Board() {
   const [error, setError] = useState<string | null>(null);
 
   const [activeSession, setActiveSession] = useState<SessionActive>({ active: false });
+  const [latestByCategory, setLatestByCategory] = useState<LatestSessionsByCategory>({
+    Design: null,
+    Build: null,
+    Review: null,
+    Maintain: null,
+    Recover: null,
+  });
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [createFor, setCreateFor] = useState<Category | null>(null);
@@ -59,6 +71,9 @@ export function Board() {
 
       const s = await getActiveSession();
       setActiveSession(s);
+
+      const latest = await getLatestSessionsByCategory();
+      setLatestByCategory(latest);
     } catch (e) {
       const msg = isHttpError(e) ? e.message : "Failed to load commands";
       setError(msg);
@@ -154,6 +169,25 @@ export function Board() {
     return formatDuration((nowMs - startMs) / 1000);
   }, [activeSession, activeCategory, nowMs]);
 
+  function formatLocal(iso: string): string | null {
+    const ms = Date.parse(iso);
+    if (Number.isNaN(ms)) return null;
+
+    // Example: 12 Apr 2026 05:33 (local time)
+    const date = new Date(ms);
+    const datePart = new Intl.DateTimeFormat(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+    const timePart = new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+    return `${datePart} ${timePart}`;
+  }
+
   return (
     <section className={styles.root}>
       <div className={styles.headerRow}>
@@ -210,6 +244,24 @@ export function Board() {
                 </button>
               </div>
             </div>
+
+            {latestByCategory[category] ? (
+              <div className={styles.paneSessionMeta}>
+                {latestByCategory[category]?.started_at ? (
+                  <span>
+                    Started: {formatLocal(latestByCategory[category]!.started_at)}
+                  </span>
+                ) : null}
+
+                {latestByCategory[category]?.ended_at ? (
+                  <span>
+                    Ended: {formatLocal(latestByCategory[category]!.ended_at!)}
+                  </span>
+                ) : activeCategory === category && sessionTimerText ? (
+                  <span>Elapsed: {sessionTimerText}</span>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className={styles.cards}>
               {(commandsByCategory.get(category) ?? []).length === 0 ? (
