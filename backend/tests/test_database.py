@@ -166,3 +166,69 @@ def test_get_db_yields_initialized_connection(tmp_path) -> None:
             pass
     finally:
         config.SETTINGS = original
+
+
+def test_connect_creates_parent_dir_when_missing(tmp_path) -> None:
+    from app.core.database import _connect
+
+    sqlite_path = str(tmp_path / "nested" / "dir" / "x.db")
+    conn = _connect(sqlite_path)
+    try:
+        conn.execute("SELECT 1")
+    finally:
+        conn.close()
+
+
+def test_init_database_file_creates_parent_dir_when_missing(tmp_path, monkeypatch) -> None:
+    from app.core import config
+    from app.core.lifecycle import init_database_file
+
+    db_path = str(tmp_path / "nested" / "db" / "test.db")
+    original = config.SETTINGS
+    config.SETTINGS = config.Settings(sqlite_path=db_path)
+    try:
+        init_database_file()
+        assert (tmp_path / "nested" / "db").is_dir()
+    finally:
+        config.SETTINGS = original
+
+
+def test_init_database_file_dir_creation_except_path_is_defensive(monkeypatch, tmp_path) -> None:
+    from app.core import config
+    from app.core.lifecycle import init_database_file
+
+    db_path = str(tmp_path / "nested" / "db" / "test.db")
+    original = config.SETTINGS
+    config.SETTINGS = config.Settings(sqlite_path=db_path)
+    try:
+        def _boom(*_args, **_kwargs):  # noqa: ANN001
+            raise RuntimeError("boom")
+
+        # Force the directory creation attempt to raise.
+        monkeypatch.setattr("pathlib.Path.mkdir", _boom, raising=True)
+
+        # When directory creation fails, sqlite connect may still fail too.
+        # We only assert that the mkdir exception is swallowed.
+        import pytest
+
+        with pytest.raises(sqlite3.OperationalError):
+            init_database_file()
+    finally:
+        config.SETTINGS = original
+
+
+def test_connect_dir_creation_except_path_is_defensive(monkeypatch, tmp_path) -> None:
+    from app.core.database import _connect
+
+    sqlite_path = str(tmp_path / "x.db")
+
+    def _boom(*_args, **_kwargs):  # noqa: ANN001
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("pathlib.Path.mkdir", _boom, raising=True)
+
+    conn = _connect(sqlite_path)
+    try:
+        conn.execute("SELECT 1")
+    finally:
+        conn.close()

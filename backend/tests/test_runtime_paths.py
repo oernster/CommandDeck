@@ -134,3 +134,106 @@ def test_config_runtime_root_handles_exception_and_falls_back(monkeypatch) -> No
     assert isinstance(out, str)
     assert out
 
+
+def test_config_runtime_root_uses_repo_root_when_not_frozen(monkeypatch) -> None:
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    root = config._runtime_root()
+    # In source mode this should resolve to the repo root that contains backend/.
+    assert (Path(root) / "backend").is_dir()
+
+
+def test_default_sqlite_path_windows_no_appdata_falls_back_to_home(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.setattr(sys, "platform", "win32", raising=False)
+
+    # Make expanduser deterministic.
+    monkeypatch.setattr(config.os.path, "expanduser", lambda _: str(tmp_path), raising=True)
+    out = config._default_sqlite_path()
+    assert out == str(tmp_path / ".commanddeck" / "command_deck.db")
+
+
+def test_default_sqlite_path_uses_localappdata_when_not_frozen(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+    out = config._default_sqlite_path()
+    assert str(tmp_path) in out
+    assert out.endswith("command_deck.db")
+
+
+def test_default_sqlite_path_uses_exe_dir_when_frozen(monkeypatch, tmp_path: Path) -> None:
+    exe = tmp_path / "CommandDeck.exe"
+    exe.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", [str(exe)], raising=True)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+
+    out = config._default_sqlite_path()
+    assert out == str(tmp_path / "command_deck.db")
+
+
+def test_default_sqlite_path_respects_override_env(monkeypatch) -> None:
+    monkeypatch.setenv("COMMANDDECK_SQLITE_PATH", "C:/tmp/override.db")
+    out = config._default_sqlite_path()
+    assert out.replace("\\", "/").endswith("/tmp/override.db")
+
+
+def test_default_sqlite_path_handles_exe_check_exception(monkeypatch, tmp_path: Path) -> None:
+    class _BadStr:
+        def __str__(self) -> str:  # noqa: D401
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(sys, "argv", [_BadStr()], raising=True)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    out = config._default_sqlite_path()
+    assert out == str(tmp_path / "CommandDeck" / "command_deck.db")
+
+
+def test_default_sqlite_path_falls_back_to_home_when_no_appdata(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux", raising=False)
+
+    # Make expanduser deterministic.
+    monkeypatch.setattr(config.os.path, "expanduser", lambda _: str(tmp_path), raising=True)
+    out = config._default_sqlite_path()
+    assert out == str(tmp_path / ".commanddeck" / "command_deck.db")
+
+
+def test_default_sqlite_path_exe_branch_exception_is_defensive(monkeypatch, tmp_path: Path) -> None:
+    # Cover the `except Exception` around argv0 parsing.
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    class _Bad:
+        def __str__(self) -> str:
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(sys, "argv", [_Bad()], raising=True)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+
+    out = config._default_sqlite_path()
+    assert out == str(tmp_path / "CommandDeck" / "command_deck.db")
+
+
+def test_default_sqlite_path_uses_repo_root_when_runtime_root_used(monkeypatch, tmp_path: Path) -> None:
+    # Cover the exe-name branch.
+    monkeypatch.delenv("COMMANDDECK_SQLITE_PATH", raising=False)
+    monkeypatch.setattr(config, "_runtime_root", lambda: str(tmp_path), raising=True)
+    monkeypatch.setattr(sys, "argv", [str(tmp_path / "CommandDeck.exe")], raising=True)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+
+    out = config._default_sqlite_path()
+    assert out == str(tmp_path / "command_deck.db")
+

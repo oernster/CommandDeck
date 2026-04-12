@@ -29,6 +29,41 @@ def _runtime_root() -> str:
     return _repo_root()
 
 
+def _default_sqlite_path() -> str:
+    """Default SQLite DB path.
+
+    Goals:
+    - Installed/runtime (frozen / exe): keep DB next to the EXE (install dir).
+    - Source/dev: never write DB files into the repository tree; use a per-user
+      app data directory instead.
+
+    `COMMANDDECK_SQLITE_PATH` can override this if needed.
+    """
+
+    override = os.environ.get("COMMANDDECK_SQLITE_PATH")
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
+
+    # Packaged runtime (or direct CommandDeck.exe run): store next to the executable.
+    try:
+        argv0 = str(sys.argv[0]) if sys.argv else ""
+        exe_name = os.path.basename(argv0).lower()
+        if getattr(sys, "frozen", False) or exe_name == "commanddeck.exe":
+            return os.path.join(_runtime_root(), "command_deck.db")
+    except Exception:
+        pass
+
+    # Dev/source: store under a user data directory.
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+        if base:
+            return os.path.join(base, "CommandDeck", "command_deck.db")
+
+    # Fallback for non-Windows / missing env: use home directory.
+    home = os.path.expanduser("~")
+    return os.path.join(home, ".commanddeck", "command_deck.db")
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """Runtime settings.
@@ -41,7 +76,7 @@ class Settings:
     # Use an explicit repo-rooted path so tests and app runtime agree regardless
     # of current working directory.
     sqlite_path: str = field(
-        default_factory=lambda: os.path.join(_runtime_root(), "command_deck.db")
+        default_factory=_default_sqlite_path
     )
 
 

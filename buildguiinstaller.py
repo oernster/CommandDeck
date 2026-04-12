@@ -201,6 +201,8 @@ def _ensure_payload_dir(project_root: Path) -> Path:
         "pytest.ini",
         "requirements-dev.txt",
         "requirements-dev-linux.txt",
+        # Never ship user data in the installer payload.
+        "command_deck.db",
     }
 
     def _ignore_unwanted(_: str, names: list[str]) -> set[str]:

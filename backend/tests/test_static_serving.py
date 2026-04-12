@@ -37,16 +37,19 @@ def test_static_serving_index_assets_and_spa_fallback(
         index = client.get("/")
         assert index.status_code == 200
         assert "text/html" in index.headers.get("content-type", "")
+        assert index.headers.get("cache-control") == "no-store"
         assert "OK" in index.text
 
         asset = client.get("/assets/app.js")
         assert asset.status_code == 200
         assert "console.log" in asset.text
+        assert asset.headers.get("cache-control") == "public, max-age=31536000, immutable"
 
         # SPA fallback should return index.html for unknown client routes.
         fallback = client.get("/some/client/route")
         assert fallback.status_code == 200
         assert "OK" in fallback.text
+        assert fallback.headers.get("cache-control") == "no-store"
 
 
 def test_static_serving_index_without_assets_dir(tmp_path: Path, monkeypatch) -> None:
@@ -63,8 +66,10 @@ def test_static_serving_index_without_assets_dir(tmp_path: Path, monkeypatch) ->
         index = client.get("/")
         assert index.status_code == 200
         assert "NOASSETS" in index.text
+        assert index.headers.get("cache-control") == "no-store"
 
         # No assets directory: requests under /assets fall through to the SPA fallback.
         asset = client.get("/assets/app.js")
         assert asset.status_code == 200
         assert "NOASSETS" in asset.text
+        assert asset.headers.get("cache-control") == "no-store"

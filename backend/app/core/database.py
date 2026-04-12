@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Generator
+from pathlib import Path
 
 from app.core.config import SETTINGS
 
@@ -60,6 +61,15 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 
 def _connect(sqlite_path: str) -> sqlite3.Connection:
+    # Ensure parent directory exists (important for per-user appdata paths).
+    try:
+        Path(sqlite_path).expanduser().resolve().parent.mkdir(
+            parents=True, exist_ok=True
+        )
+    except Exception:
+        # If we can't create dirs, let sqlite raise a clearer error.
+        pass
+
     conn = sqlite3.connect(sqlite_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
