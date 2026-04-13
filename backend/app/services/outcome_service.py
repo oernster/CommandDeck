@@ -32,6 +32,11 @@ class OutcomeService:
         # caller may send ids that were just deleted or are out-of-scope.
         return self._outcomes.latest_and_counts_for_commands(command_ids)
 
+    def list_for_commands(self, command_ids: list[int]) -> dict[int, list[Outcome]]:
+        # Intentionally does not validate existence of each command id; the caller
+        # may send ids that were just deleted or are out-of-scope.
+        return self._outcomes.list_for_commands(command_ids)
+
     def create(self, *, command_id: int, note: str) -> Outcome:
         if self._commands.get(command_id) is None:
             raise NotFoundError("Command not found")

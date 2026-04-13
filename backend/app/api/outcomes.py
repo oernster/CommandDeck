@@ -9,6 +9,8 @@ from app.domain.errors import NotFoundError
 from app.domain.schemas import (
     OutcomeCreateRequest,
     OutcomeResponse,
+    OutcomesByCommandRequest,
+    OutcomesByCommandResponse,
     OutcomesLatestRequest,
     OutcomesLatestResponse,
 )
@@ -69,6 +71,26 @@ def latest_outcomes(
         },
         counts_by_command_id=counts,
     )
+
+
+@router.post(
+    "/api/outcomes/by-command",
+    response_model=OutcomesByCommandResponse,
+)
+def outcomes_by_command(
+    payload: OutcomesByCommandRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> OutcomesByCommandResponse:
+    service = _service(conn)
+    grouped = service.list_for_commands(payload.command_ids)
+
+    # Always include an entry for every requested command id.
+    by: dict[int, list[OutcomeResponse]] = {}
+    for cid in payload.command_ids:
+        items = grouped.get(cid, [])
+        by[cid] = [OutcomeResponse.from_model(o) for o in items]
+
+    return OutcomesByCommandResponse(by_command_id=by)
 
 
 @router.delete("/api/outcomes/{outcome_id}")

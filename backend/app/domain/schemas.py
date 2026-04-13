@@ -78,6 +78,16 @@ class OutcomesLatestResponse(BaseModel):
     counts_by_command_id: dict[int, int] = Field(default_factory=dict)
 
 
+class OutcomesByCommandRequest(BaseModel):
+    command_ids: list[int]
+
+
+class OutcomesByCommandResponse(BaseModel):
+    # Key is command_id. Value is all outcomes for that command, ordered newest-first.
+    # Includes an entry for every requested command_id (with an empty list when none).
+    by_command_id: dict[int, list[OutcomeResponse]]
+
+
 class SessionStartRequest(BaseModel):
     command_id: int
 

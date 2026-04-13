@@ -63,6 +63,32 @@ class OutcomeRepository:
             counts[o.command_id] = int(r["total_count"])
         return latest, counts
 
+    def list_for_commands(self, command_ids: list[int]) -> dict[int, list[Outcome]]:
+        """Return outcomes grouped by command_id (newest-first per command).
+
+        Only returns entries for command_ids that have at least one outcome.
+        """
+
+        if not command_ids:
+            return {}
+
+        placeholders = ",".join(["?"] * len(command_ids))
+        rows = self._conn.execute(
+            f"""
+            SELECT id, command_id, note, created_at
+            FROM outcomes
+            WHERE command_id IN ({placeholders})
+            ORDER BY command_id ASC, created_at DESC, id DESC
+            """.strip(),
+            tuple(command_ids),
+        ).fetchall()
+
+        out: dict[int, list[Outcome]] = {}
+        for r in rows:
+            o = self._row_to_outcome(r)
+            out.setdefault(o.command_id, []).append(o)
+        return out
+
     def create(self, command_id: int, note: str, created_at: int) -> Outcome:
         self._conn.execute(
             "INSERT INTO outcomes (command_id, note, created_at) VALUES (?, ?, ?)",

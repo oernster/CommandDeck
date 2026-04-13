@@ -33,7 +33,7 @@ import {
 import type { SnapshotSummary } from "../../api/snapshots";
 
 import type { Outcome } from "../../api/outcomes";
-import { getLatestOutcomesSummary } from "../../api/outcomes";
+import { listOutcomesByCommand } from "../../api/outcomes";
 import { createOutcome } from "../../api/outcomes";
 
 import commandDeckLogo from "../../assets/CommandDeck.png";
@@ -58,13 +58,9 @@ export function Board() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [latestOutcomeByCommandId, setLatestOutcomeByCommandId] = useState<
-    Record<number, Outcome>
-  >({});
-
-  const [outcomeCountByCommandId, setOutcomeCountByCommandId] = useState<
-    Record<number, number>
-  >({});
+  const [outcomesByCommandId, setOutcomesByCommandId] = useState<Record<number, Outcome[]>>(
+    {}
+  );
 
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<
@@ -196,9 +192,8 @@ export function Board() {
       const items = await listCommands();
       setCommands(items);
 
-      const outcomesSummary = await getLatestOutcomesSummary(items.map((c) => c.id));
-      setLatestOutcomeByCommandId(outcomesSummary.by_command_id);
-      setOutcomeCountByCommandId(outcomesSummary.counts_by_command_id);
+      const byCommandId = await listOutcomesByCommand(items.map((c) => c.id));
+      setOutcomesByCommandId(byCommandId);
 
       const s = await getActiveSession();
       setActiveSession(s);
@@ -235,7 +230,7 @@ export function Board() {
   }
 
   function beginEditLatestOutcome(commandId: number): void {
-    const latest = latestOutcomeByCommandId[commandId]?.note ?? "";
+    const latest = outcomesByCommandId[commandId]?.[0]?.note ?? "";
     openOutcomeComposerWithDraft(commandId, latest);
   }
 
@@ -272,11 +267,12 @@ export function Board() {
     try {
       const created = await createOutcome(commandId, { note: trimmed });
       // Update inline state immediately (fast, no navigation).
-      setLatestOutcomeByCommandId((prev) => ({ ...prev, [commandId]: created }));
-      setOutcomeCountByCommandId((prev) => ({
-        ...prev,
-        [commandId]: (prev[commandId] ?? 0) + 1,
-      }));
+      setOutcomesByCommandId((prev) => {
+        const next = { ...prev };
+        const existing = next[commandId] ?? [];
+        next[commandId] = [created, ...existing];
+        return next;
+      });
       setDrawerOutcomesNonce((n) => n + 1);
       collapseOutcomeComposer(commandId);
     } catch (e) {
@@ -1181,22 +1177,7 @@ export function Board() {
                     </div>
 
                     {(() => {
-                      const count = outcomeCountByCommandId[cmd.id] ?? 0;
-                      const more = Math.max(0, count - 1);
-                      if (more <= 0) return null;
-                      return (
-                        <button
-                          type="button"
-                          className={styles.cardOutcomeMore}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelected(cmd);
-                          }}
-                        >
-                          +{more} more
-                        </button>
-                      );
+                      return null;
                     })()}
 
                     <div
@@ -1233,47 +1214,74 @@ export function Board() {
                           rows={2}
                         />
                       ) : (
-                        <button
-                          type="button"
-                          className={styles.cardOutcomeRowButton}
-                          title={
-                            (outcomeCountByCommandId[cmd.id] ?? 0) === 0
-                              ? "Add an outcome"
-                              : "Edit latest outcome (saves as a new outcome entry)"
-                          }
-                          aria-label={
-                            (outcomeCountByCommandId[cmd.id] ?? 0) === 0
-                              ? "Add outcome"
-                              : "Edit latest outcome"
-                          }
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if ((outcomeCountByCommandId[cmd.id] ?? 0) === 0) {
-                              openOutcomeComposer(cmd.id);
-                              return;
-                            }
-                            beginEditLatestOutcome(cmd.id);
-                          }}
-                        >
-                          <span className={styles.cardOutcomeRowIcon} aria-hidden="true">
-                            {(outcomeCountByCommandId[cmd.id] ?? 0) === 0
-                              ? plusSvg()
-                              : pencilSvg()}
-                          </span>
-
-                          {(outcomeCountByCommandId[cmd.id] ?? 0) === 0 ? (
-                            <span
-                              className={`${styles.cardOutcomeRowText} ${styles.cardOutcomeRowAddText}`}
+                        <>
+                          {(outcomesByCommandId[cmd.id] ?? []).length === 0 ? (
+                            <button
+                              type="button"
+                              className={styles.cardOutcomeRowButton}
+                              title="Add an outcome"
+                              aria-label="Add outcome"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openOutcomeComposer(cmd.id);
+                              }}
                             >
-                              Add outcome
-                            </span>
+                              <span className={styles.cardOutcomeRowIcon} aria-hidden="true">
+                                {plusSvg()}
+                              </span>
+                              <span
+                                className={`${styles.cardOutcomeRowText} ${styles.cardOutcomeRowAddText}`}
+                              >
+                                Add outcome
+                              </span>
+                            </button>
                           ) : (
-                            <span className={styles.cardOutcomeRowText}>
-                              {latestOutcomeByCommandId[cmd.id]?.note ?? ""}
-                            </span>
+                            <div className={styles.cardOutcomeList}>
+                              {(outcomesByCommandId[cmd.id] ?? []).map((o) => (
+                                <div key={o.id} className={styles.cardOutcomeItem}>
+                                  <button
+                                    type="button"
+                                    className={styles.cardOutcomeRowButton}
+                                    title="Edit latest outcome (saves as a new outcome entry)"
+                                    aria-label="Edit latest outcome"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      beginEditLatestOutcome(cmd.id);
+                                    }}
+                                  >
+                                    <span
+                                      className={styles.cardOutcomeRowIcon}
+                                      aria-hidden="true"
+                                    >
+                                      {pencilSvg()}
+                                    </span>
+                                    <span className={styles.cardOutcomeRowText}>{o.note}</span>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                        </button>
+
+                          {(outcomesByCommandId[cmd.id] ?? []).length > 0 ? (
+                            <div className={styles.cardOutcomeAddRow}>
+                              <button
+                                type="button"
+                                className={styles.cardOutcomeAdd}
+                                title="Add a new outcome"
+                                aria-label="Add outcome"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openOutcomeComposer(cmd.id);
+                                }}
+                              >
+                                + Add outcome
+                              </button>
+                            </div>
+                          ) : null}
+                        </>
                       )}
 
                       {savingOutcomeByCommandId[cmd.id] ? (

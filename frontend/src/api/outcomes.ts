@@ -12,6 +12,10 @@ export type LatestOutcomesSummary = {
   counts_by_command_id: Record<number, number>;
 };
 
+export type OutcomesByCommandResponse = {
+  by_command_id: Record<number, Outcome[]>;
+};
+
 export async function listOutcomes(commandId: number): Promise<Outcome[]> {
   return await apiFetch<Outcome[]>(`/api/commands/${commandId}/outcomes`);
 }
@@ -46,5 +50,16 @@ export async function getLatestOutcomesSummary(
     by_command_id: resp.by_command_id ?? {},
     counts_by_command_id: resp.counts_by_command_id ?? {},
   };
+}
+
+export async function listOutcomesByCommand(
+  commandIds: number[]
+): Promise<Record<number, Outcome[]>> {
+  if (commandIds.length === 0) return {};
+  const resp = await apiFetch<OutcomesByCommandResponse>("/api/outcomes/by-command", {
+    method: "POST",
+    body: JSON.stringify({ command_ids: commandIds }),
+  });
+  return resp.by_command_id ?? {};
 }
 

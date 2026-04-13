@@ -703,6 +703,29 @@
   gap: 6px;
 }
 
+.cardOutcomeList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardOutcomeItem {
+  position: relative;
+}
+
+/* Yellow/orange divider between outcomes (indented; matches stage title color). */
+.cardOutcomeItem + .cardOutcomeItem::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  /* Slightly lighter than the card border (rgba(255,255,255,0.07)). */
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 1px;
+}
+
 /* Clickable latest-outcome row (explicit affordance; not plain text). */
 .cardOutcomeRowButton {
   width: 100%;
@@ -775,6 +798,11 @@
   color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
   cursor: pointer;
+}
+
+.cardOutcomeAddRow {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .cardOutcomeAdd:hover {
