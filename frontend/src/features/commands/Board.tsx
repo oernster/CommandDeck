@@ -125,6 +125,16 @@ export function Board() {
   const outcomeTextareaByCommandId = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const suppressNextCardClickByCommandId = useRef<Record<number, boolean>>({});
 
+  // Inline title editor state (per command id)
+  const [titleDraftByCommandId, setTitleDraftByCommandId] = useState<Record<number, string>>({});
+  const [titleEditorOpenByCommandId, setTitleEditorOpenByCommandId] = useState<
+    Record<number, boolean>
+  >({});
+  const [savingTitleByCommandId, setSavingTitleByCommandId] = useState<Record<number, boolean>>(
+    {}
+  );
+  const titleInputByCommandId = useRef<Record<number, HTMLInputElement | null>>({});
+
   const stageLabels = useMemo((): Record<StageId, string> => {
     const overrides = board?.stage_labels ?? null;
     return {
@@ -376,6 +386,61 @@ export function Board() {
     }
   }
 
+  function openTitleEditor(commandId: number, currentTitle: string): void {
+    // Avoid opening drawer due to the click that triggered the edit.
+    suppressNextCardClickByCommandId.current[commandId] = true;
+    window.setTimeout(() => {
+      suppressNextCardClickByCommandId.current[commandId] = false;
+    }, 0);
+
+    setTitleDraftByCommandId((prev) => ({ ...prev, [commandId]: currentTitle }));
+    setTitleEditorOpenByCommandId((prev) => ({ ...prev, [commandId]: true }));
+
+    window.setTimeout(() => {
+      const el = titleInputByCommandId.current[commandId];
+      el?.focus();
+      el?.select();
+    }, 0);
+  }
+
+  function cancelTitleEditor(commandId: number): void {
+    setTitleEditorOpenByCommandId((prev) => ({ ...prev, [commandId]: false }));
+    setTitleDraftByCommandId((prev) => ({ ...prev, [commandId]: "" }));
+  }
+
+  async function commitTitleEditor(commandId: number): Promise<void> {
+    const raw = titleDraftByCommandId[commandId] ?? "";
+    const cleaned = raw.trim();
+
+    // Close editor on empty/invalid titles (do not persist).
+    if (!cleaned) {
+      cancelTitleEditor(commandId);
+      return;
+    }
+
+    const current = commands.find((c) => c.id === commandId)?.title ?? "";
+    if (cleaned === current.trim()) {
+      cancelTitleEditor(commandId);
+      return;
+    }
+
+    setSavingTitleByCommandId((prev) => ({ ...prev, [commandId]: true }));
+    setError(null);
+    try {
+      await updateCommand(commandId, { title: cleaned });
+      // Update the list locally for snappier UI.
+      setCommands((prev) =>
+        prev.map((c) => (c.id === commandId ? { ...c, title: cleaned } : c))
+      );
+      cancelTitleEditor(commandId);
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not update title";
+      setError(msg);
+    } finally {
+      setSavingTitleByCommandId((prev) => ({ ...prev, [commandId]: false }));
+    }
+  }
+
   async function onDelete(id: number): Promise<void> {
     const ok = window.confirm("Delete this command?");
     if (!ok) return;
@@ -407,6 +472,11 @@ export function Board() {
         <circle cx="11" cy="12" r="1.2" />
       </svg>
     );
+  }
+
+  function titlePencilSvg() {
+    // Reuse the same pencil, but allow separate styling if needed.
+    return pencilSvg();
   }
 
   function onGripDragStart(e: React.DragEvent, cmd: Command): void {
@@ -939,23 +1009,24 @@ export function Board() {
                   autoFocus
                 />
               ) : (
-                <h2 className={styles.columnTitle}>{stageLabels[stage_id]}</h2>
+                <div className={styles.stageTitleRow}>
+                  <button
+                    type="button"
+                    className={styles.stageRenameIconButton}
+                    title="Rename stage"
+                    aria-label="Rename stage"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingStageId(stage_id);
+                      setStageLabelDraft(stageLabels[stage_id]);
+                    }}
+                  >
+                    {pencilSvg()}
+                  </button>
+                  <h2 className={styles.columnTitle}>{stageLabels[stage_id]}</h2>
+                </div>
               )}
-
-              <div className={styles.columnHeaderActions}>
-                <button
-                  type="button"
-                  className={styles.secondaryButton}
-                  title="Rename stage"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingStageId(stage_id);
-                    setStageLabelDraft(stageLabels[stage_id]);
-                  }}
-                >
-                  Rename
-                </button>
-              </div>
             </div>
 
             {latestByStageId[stage_id] ? (
@@ -1018,25 +1089,81 @@ export function Board() {
                 >
                   <div className={styles.cardTop}>
                     <div className={styles.cardTitleRow}>
-                      <span className={styles.cardTitle}>{cmd.title}</span>
-                      <button
-                        type="button"
-                        className={styles.dragHandle}
-                        draggable
-                        aria-label="Reorder"
-                        title="Drag to reorder"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                        onDragStart={(e) => onGripDragStart(e, cmd)}
-                        onDragEnd={onGripDragEnd}
-                      >
-                        {gripSvg()}
-                      </button>
-                      <span
-                        className={`${styles.statusDot} ${statusClass(cmd.status)}`}
-                        aria-label={`Status: ${cmd.status}`}
-                        title={cmd.status}
-                      />
+                      <div className={styles.cardTitleLeft}>
+                        {titleEditorOpenByCommandId[cmd.id] ? (
+                          <input
+                            ref={(el) => {
+                              titleInputByCommandId.current[cmd.id] = el;
+                            }}
+                            className={styles.cardTitleInput}
+                            value={titleDraftByCommandId[cmd.id] ?? ""}
+                            aria-label="Task title"
+                            maxLength={200}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              setTitleDraftByCommandId((prev) => ({
+                                ...prev,
+                                [cmd.id]: e.target.value,
+                              }))
+                            }
+                            onBlur={() => void commitTitleEditor(cmd.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                e.preventDefault();
+                                cancelTitleEditor(cmd.id);
+                                return;
+                              }
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                void commitTitleEditor(cmd.id);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.cardTitleButton}
+                            title="Rename task"
+                            aria-label="Rename task"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openTitleEditor(cmd.id, cmd.title);
+                            }}
+                          >
+                            <span className={styles.cardTitleIcon} aria-hidden="true">
+                              {titlePencilSvg()}
+                            </span>
+                            <span className={styles.cardTitle}>{cmd.title}</span>
+                          </button>
+                        )}
+
+                        {savingTitleByCommandId[cmd.id] ? (
+                          <span className={styles.cardTitleSaving}>Saving…</span>
+                        ) : null}
+                      </div>
+
+                      <div className={styles.cardTitleRight}>
+                        <button
+                          type="button"
+                          className={styles.dragHandle}
+                          draggable
+                          aria-label="Reorder"
+                          title="Drag to reorder"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          onDragStart={(e) => onGripDragStart(e, cmd)}
+                          onDragEnd={onGripDragEnd}
+                        >
+                          {gripSvg()}
+                        </button>
+                        <span
+                          className={`${styles.statusDot} ${statusClass(cmd.status)}`}
+                          aria-label={`Status: ${cmd.status}`}
+                          title={cmd.status}
+                        />
+                      </div>
                     </div>
 
                     {(() => {
