@@ -34,7 +34,8 @@
 
 .titleRow {
   display: flex;
-  align-items: baseline;
+  /* Align the bottom edge of the board-name input with the title for a cleaner top-bar baseline. */
+  align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -43,6 +44,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .sessionBadge {
@@ -246,6 +249,7 @@
   font-size: 38px;
   font-weight: 650;
   letter-spacing: 0.2px;
+  line-height: 1;
 }
 
 .boardName {

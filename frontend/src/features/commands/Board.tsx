@@ -20,6 +20,7 @@ import type { LatestSessionsByStageId, SessionActive } from "../../api/sessions"
 
 import { CreateCommandModal } from "./CreateCommandModal";
 import { CommandDrawer } from "./CommandDrawer";
+import { TrayRuntimeIndicator } from "../../components/TrayRuntimeIndicator";
 
 import { getBoard, updateBoard, updateStageLabels } from "../../api/board";
 import type { BoardState } from "../../api/board";
@@ -652,6 +653,8 @@ export function Board() {
             >
               Stop
             </button>
+
+            <TrayRuntimeIndicator />
 
             <button
               type="button"
