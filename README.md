@@ -1,4 +1,4 @@
-# Command Deck
+# <img width="40" height="40" alt="9d42c914-d72d-414d-8925-d5609b1c642b-3" src="https://github.com/user-attachments/assets/086711ea-3ac5-4cd3-a26a-31e597847a70" /> Command Deck
 
 Command Deck is an operational system for issuing intent, tracking execution, and recording outcomes.
 
