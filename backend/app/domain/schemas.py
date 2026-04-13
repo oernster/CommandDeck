@@ -116,6 +116,10 @@ class SnapshotLoadResponse(BaseModel):
     ok: bool = True
 
 
+class SnapshotRenameRequest(BaseModel):
+    name: str = Field(min_length=0)
+
+
 # Keyed by stage id ("DESIGN", "BUILD", ...). Value is the latest session
 # for that stage, or null if no session has ever been recorded.
 SessionLatestByStageId = dict[str, SessionResponse | None]

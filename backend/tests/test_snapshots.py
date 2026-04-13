@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.repositories.board_repository import BoardRepository
+from app.repositories.session_repository import SessionRepository
 from app.repositories.snapshot_repository import SnapshotRepository
 from app.services.snapshot_service import SnapshotService
 
@@ -94,7 +95,7 @@ def test_snapshot_save_list_and_dedupe_ignores_session_timing(client):
     s1 = client.post("/api/snapshots")
     assert s1.status_code == 201
     snap1 = s1.json()
-    assert snap1["name"] == "Untitled board"
+    assert "name" in snap1
 
     # Stop + start another session to change timestamps but keep structural meaning
     # (active session stage remains DESIGN after restart).
@@ -107,7 +108,7 @@ def test_snapshot_save_list_and_dedupe_ignores_session_timing(client):
     assert s2.status_code == 201
     snap2 = s2.json()
 
-    # Dedupe: same board name + same structural form => same snapshot id.
+    # Dedupe: same structural form => same snapshot id.
     assert snap2["id"] == snap1["id"]
 
     listed = client.get("/api/snapshots")
@@ -152,6 +153,106 @@ def test_snapshot_repository_upsert_rolls_back_on_integrity_error(db_connection)
     assert after == before
 
 
+def test_snapshot_repository_upsert_by_name_hash_inserts_and_updates(db_connection):
+    repo = SnapshotRepository(db_connection)
+    out1 = repo.upsert_by_name_hash(
+        name="N",
+        structural_hash="h",
+        saved_at=1,
+        payload_json="{}",
+    )
+    assert out1["id"] >= 1
+    assert out1["name"] == "N"
+    assert out1["saved_at"] == 1
+
+    out2 = repo.upsert_by_name_hash(
+        name="N",
+        structural_hash="h",
+        saved_at=2,
+        payload_json="{\"x\":1}",
+    )
+    assert out2["id"] == out1["id"]
+    assert out2["saved_at"] == 2
+
+
+def test_snapshot_repository_get_summary_none_when_missing(db_connection):
+    repo = SnapshotRepository(db_connection)
+    assert repo.get_summary(999999) is None
+
+
+def test_can_rename_snapshot_via_patch(client):
+    created = client.post("/api/snapshots")
+    assert created.status_code == 201
+    snap = created.json()
+
+    r = client.patch(f"/api/snapshots/{snap['id']}", json={"name": "  My Snapshot  "})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == snap["id"]
+    assert data["name"] == "My Snapshot"
+
+    listed = client.get("/api/snapshots")
+    assert listed.status_code == 200
+    items = listed.json()
+    assert any(it["id"] == snap["id"] and it["name"] == "My Snapshot" for it in items)
+
+
+def test_rename_snapshot_rejects_empty(client):
+    created = client.post("/api/snapshots")
+    assert created.status_code == 201
+    snap = created.json()
+
+    r = client.patch(f"/api/snapshots/{snap['id']}", json={"name": "   "})
+    assert r.status_code == 400
+
+
+def test_rename_snapshot_404_when_missing(client):
+    r = client.patch("/api/snapshots/999999", json={"name": "X"})
+    assert r.status_code == 404
+
+
+def test_snapshot_default_name_uses_stage_label_and_handles_invalid_labels_json(client, db_connection):
+    # Create a command and start a session (so stage is known).
+    r1 = client.post(
+        "/api/commands",
+        json={"title": "A", "stage_id": "DESIGN", "status": "Not Started"},
+    )
+    assert r1.status_code == 201
+    cmd1 = r1.json()
+
+    # Override stage label so snapshot naming uses the override.
+    rlabels = client.patch(
+        "/api/board/stage-labels",
+        json={
+            "stage_labels": {
+                "DESIGN": "Sketch",
+                "BUILD": "Build",
+                "REVIEW": "Review",
+                "COMPLETE": "Complete",
+            }
+        },
+    )
+    assert rlabels.status_code == 200
+
+    rs = client.post("/api/sessions/start", json={"command_id": cmd1["id"]})
+    assert rs.status_code == 200
+
+    s1 = client.post("/api/snapshots")
+    assert s1.status_code == 201
+    snap1 = s1.json()
+    assert snap1["name"].startswith("Sketch – ")
+
+    # Corrupt stage label data to hit the exception branch in _get_stage_label.
+    db_connection.execute(
+        "UPDATE board_state SET stage_labels_json = ? WHERE id = 1",
+        ("not-json",),
+    )
+    db_connection.commit()
+
+    s2 = client.post("/api/snapshots")
+    assert s2.status_code == 201
+
+
 def test_snapshot_invalid_payload_rejected(client, db_connection):
     # Call the service directly so we can assert the validation error without
     # TestClient re-raising server exceptions.
@@ -165,6 +266,7 @@ def test_snapshot_invalid_payload_rejected(client, db_connection):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     with pytest.raises(ValueError):
@@ -191,6 +293,7 @@ def test_snapshot_apply_payload_rolls_back_on_mid_transaction_error(db_connectio
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
 
@@ -215,6 +318,7 @@ def test_snapshot_apply_payload_keeps_first_active_session_when_multiple(db_conn
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
 
@@ -281,6 +385,7 @@ def test_snapshot_apply_payload_validation_errors(db_connection, payload):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     with pytest.raises(Exception):
@@ -291,6 +396,7 @@ def test_snapshot_apply_payload_v2_ignores_second_active_session(db_connection):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
 
@@ -320,6 +426,7 @@ def test_snapshot_apply_payload_raises_if_board_state_missing(db_connection):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     db_connection.execute("DELETE FROM board_state")
@@ -340,6 +447,7 @@ def test_snapshot_apply_payload_rejects_sessions_non_dict_element(db_connection)
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     payload = {
@@ -357,6 +465,7 @@ def test_snapshot_apply_payload_rejects_sessions_none(db_connection):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     payload = {
@@ -374,6 +483,7 @@ def test_snapshot_apply_payload_commands_none_is_invalid(db_connection):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     payload = {
@@ -391,6 +501,7 @@ def test_snapshot_apply_payload_rejects_category_items_none(db_connection):
     service = SnapshotService(
         conn=db_connection,
         board=BoardRepository(db_connection),
+        sessions=SessionRepository(db_connection),
         snapshots=SnapshotRepository(db_connection),
     )
     payload = {

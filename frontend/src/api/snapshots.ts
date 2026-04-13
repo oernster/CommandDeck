@@ -22,3 +22,14 @@ export async function loadSnapshot(snapshotId: number): Promise<{ ok: true }> {
   });
 }
 
+export async function patchSnapshot(
+  snapshotId: number,
+  payload: { name: string }
+): Promise<SnapshotSummary> {
+  return await apiFetch<SnapshotSummary>(`/api/snapshots/${snapshotId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+

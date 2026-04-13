@@ -23,7 +23,12 @@ import { CommandDrawer } from "./CommandDrawer";
 
 import { getBoard, updateBoard, updateStageLabels } from "../../api/board";
 import type { BoardState } from "../../api/board";
-import { listSnapshots, loadSnapshot, saveSnapshot } from "../../api/snapshots";
+import {
+  listSnapshots,
+  loadSnapshot,
+  patchSnapshot,
+  saveSnapshot,
+} from "../../api/snapshots";
 import type { SnapshotSummary } from "../../api/snapshots";
 
 import styles from "./Board.module.css";
@@ -72,6 +77,10 @@ export function Board() {
 
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+
+  const [renamingSnapshotId, setRenamingSnapshotId] = useState<number | null>(null);
+  const [snapshotNameDraft, setSnapshotNameDraft] = useState<string>("");
+  const snapshotRenameInputRef = useRef<HTMLInputElement | null>(null);
 
   const [focusedStageId, setFocusedStageId] = useState<StageId>("DESIGN");
   const [createFor, setCreateFor] = useState<StageId | null>(null);
@@ -157,6 +166,31 @@ export function Board() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (renamingSnapshotId === null) return;
+    const t = window.setTimeout(() => {
+      snapshotRenameInputRef.current?.focus();
+      snapshotRenameInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [renamingSnapshotId]);
+
+  function pencilSvg() {
+    return (
+      <svg
+        className={styles.icon}
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          fill="currentColor"
+          d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm18.71-11.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.99-1.66Z"
+        />
+      </svg>
+    );
+  }
 
   useEffect(() => {
     if (!board?.is_new_unnamed) return;
@@ -394,6 +428,33 @@ export function Board() {
     }
   }
 
+  function beginRenameSnapshot(s: SnapshotSummary): void {
+    setRenamingSnapshotId(s.id);
+    setSnapshotNameDraft(s.name);
+  }
+
+  async function commitRenameSnapshot(snapshotId: number): Promise<void> {
+    const cleaned = snapshotNameDraft.trim();
+    if (!cleaned) {
+      // Invalid: revert.
+      setRenamingSnapshotId(null);
+      setSnapshotNameDraft("");
+      return;
+    }
+
+    setError(null);
+    try {
+      const updated = await patchSnapshot(snapshotId, { name: cleaned });
+      setSnapshots((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not rename snapshot";
+      setError(msg);
+    } finally {
+      setRenamingSnapshotId(null);
+      setSnapshotNameDraft("");
+    }
+  }
+
   async function onCommitBoardName(): Promise<void> {
     if (boardNameDraft === (board?.name ?? "")) return;
     setError(null);
@@ -616,14 +677,63 @@ export function Board() {
                     <div className={styles.dropdownEmpty}>No snapshots yet</div>
                   ) : (
                     snapshots.map((s) => (
-                      <button
+                      <div
                         key={s.id}
-                        type="button"
-                        className={styles.dropdownItem}
-                        onClick={() => void onLoadSnapshot(s.id)}
+                        className={styles.snapshotRow}
+                        role="none"
                       >
-                        {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
-                      </button>
+                        {renamingSnapshotId === s.id ? (
+                          <input
+                            ref={snapshotRenameInputRef}
+                            className={styles.snapshotRenameInput}
+                            value={snapshotNameDraft}
+                            aria-label="Snapshot name"
+                            onChange={(e) => setSnapshotNameDraft(e.target.value)}
+                            onBlur={() => void commitRenameSnapshot(s.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                              }
+                              if (e.key === "Escape") {
+                                setRenamingSnapshotId(null);
+                                setSnapshotNameDraft("");
+                              }
+                            }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.dropdownItem}
+                            onClick={() => void onLoadSnapshot(s.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "F2") {
+                                e.preventDefault();
+                                beginRenameSnapshot(s);
+                              }
+                            }}
+                          >
+                            <span className={styles.snapshotRowText}>
+                              {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
+                            </span>
+                          </button>
+                        )}
+
+                        {renamingSnapshotId === s.id ? null : (
+                          <button
+                            type="button"
+                            className={styles.snapshotEditButton}
+                            title="Rename (F2)"
+                            aria-label="Rename snapshot"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              beginRenameSnapshot(s);
+                            }}
+                          >
+                            {pencilSvg()}
+                          </button>
+                        )}
+                      </div>
                     ))
                   )}
                 </div>

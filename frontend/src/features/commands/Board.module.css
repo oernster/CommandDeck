@@ -132,6 +132,80 @@
   text-overflow: ellipsis;
 }
 
+.snapshotRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Ensure the main row button doesn't consume the whole flex row and obscure the
+   pencil affordance. */
+.snapshotRow .dropdownItem {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.snapshotRowText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshotEditButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  /* Always visible for discoverability; hover/focus increases contrast. */
+  opacity: 0.85;
+  visibility: visible;
+}
+
+.snapshotRow:hover .snapshotEditButton,
+.snapshotRow:focus-within .snapshotEditButton {
+  opacity: 1;
+}
+
+.snapshotEditButton:hover,
+.snapshotEditButton:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(90, 220, 140, 0.4);
+  outline: none;
+}
+
+.snapshotRenameInput {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(175, 210, 255, 0.24);
+  background: rgba(0, 0, 0, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.snapshotRenameInput:focus-visible {
+  outline: 2px solid rgba(120, 170, 255, 0.9);
+  outline-offset: 2px;
+}
+
+/* Hover affordance: highlight the whole row's border in green. */
+.snapshotRow:hover .dropdownItem,
+.snapshotRow:focus-within .dropdownItem {
+  border-color: rgba(90, 220, 140, 0.55);
+}
+
 .dropdownItem:hover,
 .dropdownItem:focus-visible {
   background: rgba(255, 255, 255, 0.06);

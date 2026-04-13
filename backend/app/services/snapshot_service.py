@@ -6,10 +6,13 @@ import sqlite3
 from collections import defaultdict
 from typing import Any
 
+from datetime import datetime
+
 from app.domain.enums import StageId, Status
 from app.domain.errors import NotFoundError
 from app.repositories.board_repository import BoardRepository
-from app.repositories.snapshot_repository import SnapshotRepository
+from app.repositories.session_repository import SessionRepository
+from app.repositories.snapshot_repository import SnapshotRepository, SnapshotSummaryRow
 
 
 class SnapshotService:
@@ -26,16 +29,18 @@ class SnapshotService:
         *,
         conn: sqlite3.Connection,
         board: BoardRepository,
+        sessions: SessionRepository,
         snapshots: SnapshotRepository,
     ) -> None:
         self._conn = conn
         self._board = board
+        self._sessions = sessions
         self._snapshots = snapshots
 
-    def list(self) -> list[dict[str, object]]:
+    def list(self) -> list[SnapshotSummaryRow]:
         return self._snapshots.list()
 
-    def save_now(self) -> dict[str, object]:
+    def save_now(self) -> SnapshotSummaryRow:
         """Serialize current DB state and upsert a snapshot with dedupe."""
 
         now_epoch_seconds = int(
@@ -44,10 +49,14 @@ class SnapshotService:
             ]
         )
         board_row = self._board.get()
-        name = board_row["name"]
+        board_name_raw = board_row["name"]
         board_name = (
-            str(name) if name is not None and str(name).strip() else "Untitled board"
+            str(board_name_raw)
+            if board_name_raw is not None and str(board_name_raw).strip()
+            else "Untitled board"
         )
+
+        snapshot_name = self._build_default_snapshot_name(board_name=board_name)
 
         payload = self._serialize_payload(board_name=board_name, saved_at=now_epoch_seconds)
         structural = self._structural_form(payload)
@@ -58,12 +67,64 @@ class SnapshotService:
         )
         structural_hash = hashlib.sha256(structural_json.encode("utf-8")).hexdigest()
 
-        return self._snapshots.upsert_by_name_hash(
-            name=board_name,
+        existing = self._snapshots.find_latest_by_structural_hash(structural_hash)
+        if existing is not None:
+            # Dedupe by structural meaning, regardless of name. Preserve any
+            # user-renamed snapshot name.
+            self._snapshots.update_payload(
+                snapshot_id=int(existing["id"]),
+                saved_at=now_epoch_seconds,
+                payload_json=payload_json,
+            )
+            # Return current summary.
+            out = self._snapshots.get_summary(int(existing["id"]))
+            assert out is not None
+            return out
+
+        return self._snapshots.insert(
+            name=snapshot_name,
             structural_hash=structural_hash,
             saved_at=now_epoch_seconds,
             payload_json=payload_json,
         )
+
+    def _build_default_snapshot_name(self, *, board_name: str) -> str:
+        """Build a human-friendly default snapshot name.
+
+        Uses local machine time (non-UTC) because the primary goal is quick
+        human scanning.
+        """
+
+        now_local = datetime.now().astimezone()
+
+        active = self._sessions.get_active()
+        if active is not None:
+            stage_id = active.stage_id
+            label = self._get_stage_label(stage_id)
+            return f"{label} – {now_local:%H:%M}"
+
+        return f"Snapshot – {now_local:%Y-%m-%d %H:%M}"
+
+    def _get_stage_label(self, stage_id: StageId) -> str:
+        """Return display label for a stage.
+
+        Respects per-board label overrides if they exist.
+        """
+
+        row = self._board.get()
+        stage_labels_json = row.get("stage_labels_json")
+        if stage_labels_json is not None and str(stage_labels_json).strip():
+            try:
+                parsed = json.loads(str(stage_labels_json))
+                if isinstance(parsed, dict):
+                    v = parsed.get(stage_id.value)
+                    if isinstance(v, str) and v.strip():
+                        return v.strip()
+            except Exception:
+                pass
+
+        # Fallback: stable title-cased stage id.
+        return stage_id.value.title()
 
     def load(self, *, snapshot_id: int) -> None:
         row = self._snapshots.get_payload(snapshot_id)

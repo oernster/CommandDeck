@@ -7,6 +7,7 @@ import pytest
 
 from app.core.database import init_db
 from app.repositories.board_repository import BoardRepository
+from app.repositories.session_repository import SessionRepository
 from app.repositories.snapshot_repository import SnapshotRepository
 from app.services.snapshot_service import SnapshotService
 
@@ -15,6 +16,7 @@ def _service(conn: sqlite3.Connection) -> SnapshotService:
     return SnapshotService(
         conn=conn,
         board=BoardRepository(conn),
+        sessions=SessionRepository(conn),
         snapshots=SnapshotRepository(conn),
     )
 
@@ -274,6 +276,17 @@ def test_snapshot_apply_payload_validation_error_sessions_wrong_type(db_connecti
                 "sessions": "nope",
             }
         )
+
+
+def test_snapshots_rename_validation_error_empty_string(client):
+    created = client.post("/api/snapshots")
+    assert created.status_code == 201
+    snap = created.json()
+
+    # Covers the explicit empty-name validation branch in
+    # [`rename_snapshot()`](backend/app/api/snapshots.py:65).
+    r = client.patch(f"/api/snapshots/{snap['id']}", json={"name": ""})
+    assert r.status_code == 400
 
 
 def test_snapshot_apply_payload_validation_error_command_entry_not_dict(db_connection) -> None:

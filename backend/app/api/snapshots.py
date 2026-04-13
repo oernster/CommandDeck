@@ -6,9 +6,11 @@ from typing import cast
 from fastapi import APIRouter, Depends
 
 from app.core.database import get_db
+from app.domain.errors import NotFoundError, ValidationError
 from app.domain.models import epoch_seconds_to_iso8601_z
-from app.domain.schemas import SnapshotLoadResponse, SnapshotSummary
+from app.domain.schemas import SnapshotLoadResponse, SnapshotRenameRequest, SnapshotSummary
 from app.repositories.board_repository import BoardRepository
+from app.repositories.session_repository import SessionRepository
 from app.repositories.snapshot_repository import SnapshotRepository
 from app.services.snapshot_service import SnapshotService
 
@@ -19,6 +21,7 @@ def _service(conn: sqlite3.Connection) -> SnapshotService:
     return SnapshotService(
         conn=conn,
         board=BoardRepository(conn),
+        sessions=SessionRepository(conn),
         snapshots=SnapshotRepository(conn),
     )
 
@@ -56,4 +59,28 @@ def load_snapshot(
     service = _service(conn)
     service.load(snapshot_id=snapshot_id)
     return SnapshotLoadResponse(ok=True)
+
+
+@router.patch("/api/snapshots/{snapshot_id}", response_model=SnapshotSummary)
+def rename_snapshot(
+    snapshot_id: int,
+    payload: SnapshotRenameRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> SnapshotSummary:
+    cleaned = payload.name.strip()
+    if not cleaned:
+        raise ValidationError("Name must not be empty")
+
+    repo = SnapshotRepository(conn)
+    if not repo.exists(snapshot_id):
+        raise NotFoundError("Snapshot not found")
+
+    repo.update_name(snapshot_id=snapshot_id, name=cleaned)
+    row = repo.get_summary(snapshot_id)
+    assert row is not None
+    return SnapshotSummary(
+        id=cast(int, row["id"]),
+        name=cast(str, row["name"]),
+        saved_at=epoch_seconds_to_iso8601_z(cast(int, row["saved_at"])),
+    )
 
