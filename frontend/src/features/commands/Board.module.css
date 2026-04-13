@@ -546,6 +546,129 @@
   -webkit-line-clamp: 3;
 }
 
+.cardOutcomeMore {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.cardOutcomeMore:hover {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: underline;
+}
+
+.cardOutcomeInline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Clickable latest-outcome row (explicit affordance; not plain text). */
+.cardOutcomeRowButton {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.88);
+  text-align: left;
+}
+
+.cardOutcomeRowButton:hover,
+.cardOutcomeRowButton:focus-visible {
+  border-color: rgba(90, 220, 140, 0.55);
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.cardOutcomeRowButton:focus-visible {
+  box-shadow: 0 0 0 2px rgba(120, 170, 255, 0.65);
+}
+
+.cardOutcomeRowIcon {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.65);
+  transform: translateY(1px);
+}
+
+.cardOutcomeRowButton:hover .cardOutcomeRowIcon,
+.cardOutcomeRowButton:focus-visible .cardOutcomeRowIcon {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cardOutcomeRowText {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.cardOutcomeRowAddText {
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 600;
+}
+
+.cardOutcomeEmptyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardOutcomeEmptyText {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+}
+
+.cardOutcomeAdd {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cardOutcomeAdd:hover {
+  text-decoration: underline;
+}
+
+.cardOutcomeTextarea {
+  width: 100%;
+  resize: none;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cardOutcomeTextarea:focus-visible {
+  outline: 2px solid rgba(120, 170, 255, 0.9);
+  outline-offset: 1px;
+}
+
+.cardOutcomeSaving {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+}
+
 .cardTitle {
   font-size: 13px;
   line-height: 1.3;

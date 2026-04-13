@@ -4,7 +4,7 @@ from __future__ import annotations
 def test_outcomes_latest_empty_payload(client) -> None:
     resp = client.post("/api/outcomes/latest", json={"command_ids": []})
     assert resp.status_code == 200
-    assert resp.json() == {"by_command_id": {}}
+    assert resp.json() == {"by_command_id": {}, "counts_by_command_id": {}}
 
 
 def test_outcomes_latest_returns_latest_per_command(client) -> None:
@@ -39,9 +39,12 @@ def test_outcomes_latest_returns_latest_per_command(client) -> None:
     assert body["by_command_id"][str(c1["id"])]["note"] == "second"
     assert body["by_command_id"][str(c2["id"])]["note"] == "only"
 
+    assert body["counts_by_command_id"][str(c1["id"])] == 2
+    assert body["counts_by_command_id"][str(c2["id"])] == 1
+
 
 def test_outcomes_latest_ignores_missing_commands(client) -> None:
     resp = client.post("/api/outcomes/latest", json={"command_ids": [999]})
     assert resp.status_code == 200
-    assert resp.json() == {"by_command_id": {}}
+    assert resp.json() == {"by_command_id": {}, "counts_by_command_id": {}}
 

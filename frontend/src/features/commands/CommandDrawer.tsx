@@ -15,6 +15,10 @@ export type CommandDrawerProps = {
   onClose: () => void;
   onRefreshCommands: () => Promise<void>;
   setError: (msg: string) => void;
+
+  // Allows the parent (board) to force-refresh outcomes when they were created
+  // inline on the card while the drawer is open.
+  outcomesRefreshNonce?: number;
 };
 
 function formatTimestamp(ts: string): string {
@@ -24,7 +28,8 @@ function formatTimestamp(ts: string): string {
 }
 
 export function CommandDrawer(props: CommandDrawerProps) {
-  const { command, stageLabels, onClose, onRefreshCommands, setError } = props;
+  const { command, stageLabels, onClose, onRefreshCommands, setError, outcomesRefreshNonce } =
+    props;
 
   const [title, setTitle] = useState(command.title);
   const [stage_id, setStageId] = useState<StageId>(command.stage_id);
@@ -59,7 +64,7 @@ export function CommandDrawer(props: CommandDrawerProps) {
   useEffect(() => {
     void refreshOutcomes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [command.id]);
+  }, [command.id, outcomesRefreshNonce]);
 
   const dirty = useMemo(() => {
     return (

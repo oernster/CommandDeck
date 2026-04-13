@@ -5,4 +5,4 @@ This module is used by:
 - the GUI installer
 """
 
-VERSION = "1.2.3"
+VERSION = "1.3.0"

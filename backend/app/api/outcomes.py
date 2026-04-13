@@ -62,11 +62,12 @@ def latest_outcomes(
     conn: sqlite3.Connection = Depends(get_db),
 ) -> OutcomesLatestResponse:
     service = _service(conn)
-    latest = service.latest_for_commands(payload.command_ids)
+    latest, counts = service.latest_and_counts_for_commands(payload.command_ids)
     return OutcomesLatestResponse(
         by_command_id={
             cid: OutcomeResponse.from_model(out) for cid, out in latest.items()
-        }
+        },
+        counts_by_command_id=counts,
     )
 
 

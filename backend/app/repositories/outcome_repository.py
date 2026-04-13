@@ -21,25 +21,28 @@ class OutcomeRepository:
         ).fetchall()
         return [self._row_to_outcome(r) for r in rows]
 
-    def latest_for_commands(self, command_ids: list[int]) -> dict[int, Outcome]:
-        """Return the latest outcome per command.
+    def latest_and_counts_for_commands(
+        self, command_ids: list[int]
+    ) -> tuple[dict[int, Outcome], dict[int, int]]:
+        """Return (latest outcome per command, total outcome counts per command).
 
         Only returns entries for command_ids that have at least one outcome.
         """
 
         if not command_ids:
-            return {}
+            return {}, {}
 
         placeholders = ",".join(["?"] * len(command_ids))
         rows = self._conn.execute(
             f"""
-            SELECT id, command_id, note, created_at
+            SELECT id, command_id, note, created_at, total_count
             FROM (
               SELECT
                 o.id,
                 o.command_id,
                 o.note,
                 o.created_at,
+                COUNT(*) OVER (PARTITION BY o.command_id) AS total_count,
                 ROW_NUMBER() OVER (
                   PARTITION BY o.command_id
                   ORDER BY o.created_at DESC, o.id DESC
@@ -52,11 +55,13 @@ class OutcomeRepository:
             tuple(command_ids),
         ).fetchall()
 
-        out: dict[int, Outcome] = {}
+        latest: dict[int, Outcome] = {}
+        counts: dict[int, int] = {}
         for r in rows:
             o = self._row_to_outcome(r)
-            out[o.command_id] = o
-        return out
+            latest[o.command_id] = o
+            counts[o.command_id] = int(r["total_count"])
+        return latest, counts
 
     def create(self, command_id: int, note: str, created_at: int) -> Outcome:
         self._conn.execute(

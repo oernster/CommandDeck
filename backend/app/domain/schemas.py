@@ -73,6 +73,10 @@ class OutcomesLatestResponse(BaseModel):
     # Key is command_id. Value is the latest outcome for that command.
     by_command_id: dict[int, OutcomeResponse]
 
+    # Key is command_id. Value is total number of outcomes for that command.
+    # Only includes command_ids that have at least one outcome.
+    counts_by_command_id: dict[int, int] = Field(default_factory=dict)
+
 
 class SessionStartRequest(BaseModel):
     command_id: int

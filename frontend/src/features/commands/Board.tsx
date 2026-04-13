@@ -33,7 +33,8 @@ import {
 import type { SnapshotSummary } from "../../api/snapshots";
 
 import type { Outcome } from "../../api/outcomes";
-import { getLatestOutcomes } from "../../api/outcomes";
+import { getLatestOutcomesSummary } from "../../api/outcomes";
+import { createOutcome } from "../../api/outcomes";
 
 import commandDeckLogo from "../../assets/CommandDeck.png";
 
@@ -59,6 +60,10 @@ export function Board() {
 
   const [latestOutcomeByCommandId, setLatestOutcomeByCommandId] = useState<
     Record<number, Outcome>
+  >({});
+
+  const [outcomeCountByCommandId, setOutcomeCountByCommandId] = useState<
+    Record<number, number>
   >({});
 
   const [draggingId, setDraggingId] = useState<number | null>(null);
@@ -95,6 +100,30 @@ export function Board() {
   const [focusedStageId, setFocusedStageId] = useState<StageId>("DESIGN");
   const [createFor, setCreateFor] = useState<StageId | null>(null);
   const [selected, setSelected] = useState<Command | null>(null);
+
+  // Used to force a drawer outcomes refresh when an outcome is created inline.
+  const [drawerOutcomesNonce, setDrawerOutcomesNonce] = useState(0);
+
+  // Inline outcome composer state (per command id)
+  const [outcomeDraftByCommandId, setOutcomeDraftByCommandId] = useState<
+    Record<number, string>
+  >({});
+
+  // Tracks the initial draft value when opening the inline composer so we can
+  // avoid saving no-op duplicates (especially when "editing" the latest outcome,
+  // which is implemented as an append-only outcome).
+  const [outcomeEditBaseByCommandId, setOutcomeEditBaseByCommandId] = useState<
+    Record<number, string>
+  >({});
+  const [outcomeComposerOpenByCommandId, setOutcomeComposerOpenByCommandId] = useState<
+    Record<number, boolean>
+  >({});
+  const [savingOutcomeByCommandId, setSavingOutcomeByCommandId] = useState<
+    Record<number, boolean>
+  >({});
+
+  const outcomeTextareaByCommandId = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const suppressNextCardClickByCommandId = useRef<Record<number, boolean>>({});
 
   const stageLabels = useMemo((): Record<StageId, string> => {
     const overrides = board?.stage_labels ?? null;
@@ -157,8 +186,9 @@ export function Board() {
       const items = await listCommands();
       setCommands(items);
 
-      const latestOutcomes = await getLatestOutcomes(items.map((c) => c.id));
-      setLatestOutcomeByCommandId(latestOutcomes);
+      const outcomesSummary = await getLatestOutcomesSummary(items.map((c) => c.id));
+      setLatestOutcomeByCommandId(outcomesSummary.by_command_id);
+      setOutcomeCountByCommandId(outcomesSummary.counts_by_command_id);
 
       const s = await getActiveSession();
       setActiveSession(s);
@@ -173,6 +203,77 @@ export function Board() {
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openOutcomeComposer(commandId: number): void {
+    openOutcomeComposerWithDraft(commandId, "");
+  }
+
+  function openOutcomeComposerWithDraft(commandId: number, draft: string): void {
+    setOutcomeDraftByCommandId((prev) => ({ ...prev, [commandId]: draft }));
+    setOutcomeEditBaseByCommandId((prev) => ({ ...prev, [commandId]: draft }));
+    setOutcomeComposerOpenByCommandId((prev) => ({ ...prev, [commandId]: true }));
+
+    // Focus on next tick so textarea is mounted.
+    window.setTimeout(() => {
+      const el = outcomeTextareaByCommandId.current[commandId];
+      el?.focus();
+      // If the user is "editing" an existing outcome, select-all is helpful.
+      if (draft.trim().length > 0) el?.select();
+    }, 0);
+  }
+
+  function beginEditLatestOutcome(commandId: number): void {
+    const latest = latestOutcomeByCommandId[commandId]?.note ?? "";
+    openOutcomeComposerWithDraft(commandId, latest);
+  }
+
+  function collapseOutcomeComposer(commandId: number): void {
+    setOutcomeComposerOpenByCommandId((prev) => ({ ...prev, [commandId]: false }));
+    setOutcomeDraftByCommandId((prev) => ({ ...prev, [commandId]: "" }));
+    setOutcomeEditBaseByCommandId((prev) => ({ ...prev, [commandId]: "" }));
+  }
+
+  async function commitInlineOutcome(commandId: number): Promise<void> {
+    const draft = outcomeDraftByCommandId[commandId] ?? "";
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      // Ignore empty submissions.
+      collapseOutcomeComposer(commandId);
+      return;
+    }
+
+    const base = (outcomeEditBaseByCommandId[commandId] ?? "").trim();
+    if (trimmed === base) {
+      // No-op edit; don't create a duplicate entry.
+      collapseOutcomeComposer(commandId);
+      return;
+    }
+
+    // Avoid opening drawer due to the click that triggered the commit.
+    suppressNextCardClickByCommandId.current[commandId] = true;
+    window.setTimeout(() => {
+      suppressNextCardClickByCommandId.current[commandId] = false;
+    }, 0);
+
+    setSavingOutcomeByCommandId((prev) => ({ ...prev, [commandId]: true }));
+    setError(null);
+    try {
+      const created = await createOutcome(commandId, { note: trimmed });
+      // Update inline state immediately (fast, no navigation).
+      setLatestOutcomeByCommandId((prev) => ({ ...prev, [commandId]: created }));
+      setOutcomeCountByCommandId((prev) => ({
+        ...prev,
+        [commandId]: (prev[commandId] ?? 0) + 1,
+      }));
+      setDrawerOutcomesNonce((n) => n + 1);
+      collapseOutcomeComposer(commandId);
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not save outcome";
+      setError(msg);
+    } finally {
+      setSavingOutcomeByCommandId((prev) => ({ ...prev, [commandId]: false }));
     }
   }
 
@@ -200,6 +301,22 @@ export function Board() {
         <path
           fill="currentColor"
           d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm18.71-11.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.99-1.66Z"
+        />
+      </svg>
+    );
+  }
+
+  function plusSvg() {
+    return (
+      <svg
+        className={styles.icon}
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          fill="currentColor"
+          d="M19 11H13V5a1 1 0 1 0-2 0v6H5a1 1 0 1 0 0 2h6v6a1 1 0 1 0 2 0v-6h6a1 1 0 1 0 0-2Z"
         />
       </svg>
     );
@@ -885,6 +1002,7 @@ export function Board() {
                       : ""
                   }`}
                   onClick={() => {
+                    if (suppressNextCardClickByCommandId.current[cmd.id]) return;
                     if (startMode && !startDisabled) {
                       setStartMode(false);
                       void onStartSession(cmd.id);
@@ -921,11 +1039,106 @@ export function Board() {
                       />
                     </div>
 
-                    {latestOutcomeByCommandId[cmd.id]?.note ? (
-                      <div className={styles.cardOutcome}>
-                        {latestOutcomeByCommandId[cmd.id]!.note}
-                      </div>
-                    ) : null}
+                    {(() => {
+                      const count = outcomeCountByCommandId[cmd.id] ?? 0;
+                      const more = Math.max(0, count - 1);
+                      if (more <= 0) return null;
+                      return (
+                        <button
+                          type="button"
+                          className={styles.cardOutcomeMore}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelected(cmd);
+                          }}
+                        >
+                          +{more} more
+                        </button>
+                      );
+                    })()}
+
+                    <div
+                      className={styles.cardOutcomeInline}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {outcomeComposerOpenByCommandId[cmd.id] ? (
+                        <textarea
+                          ref={(el) => {
+                            outcomeTextareaByCommandId.current[cmd.id] = el;
+                          }}
+                          className={styles.cardOutcomeTextarea}
+                          value={outcomeDraftByCommandId[cmd.id] ?? ""}
+                          placeholder="What happened?"
+                          onChange={(e) =>
+                            setOutcomeDraftByCommandId((prev) => ({
+                              ...prev,
+                              [cmd.id]: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              collapseOutcomeComposer(cmd.id);
+                              return;
+                            }
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              void commitInlineOutcome(cmd.id);
+                            }
+                          }}
+                          onBlur={() => void commitInlineOutcome(cmd.id)}
+                          rows={2}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.cardOutcomeRowButton}
+                          title={
+                            (outcomeCountByCommandId[cmd.id] ?? 0) === 0
+                              ? "Add an outcome"
+                              : "Edit latest outcome (saves as a new outcome entry)"
+                          }
+                          aria-label={
+                            (outcomeCountByCommandId[cmd.id] ?? 0) === 0
+                              ? "Add outcome"
+                              : "Edit latest outcome"
+                          }
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if ((outcomeCountByCommandId[cmd.id] ?? 0) === 0) {
+                              openOutcomeComposer(cmd.id);
+                              return;
+                            }
+                            beginEditLatestOutcome(cmd.id);
+                          }}
+                        >
+                          <span className={styles.cardOutcomeRowIcon} aria-hidden="true">
+                            {(outcomeCountByCommandId[cmd.id] ?? 0) === 0
+                              ? plusSvg()
+                              : pencilSvg()}
+                          </span>
+
+                          {(outcomeCountByCommandId[cmd.id] ?? 0) === 0 ? (
+                            <span
+                              className={`${styles.cardOutcomeRowText} ${styles.cardOutcomeRowAddText}`}
+                            >
+                              Add outcome
+                            </span>
+                          ) : (
+                            <span className={styles.cardOutcomeRowText}>
+                              {latestOutcomeByCommandId[cmd.id]?.note ?? ""}
+                            </span>
+                          )}
+                        </button>
+                      )}
+
+                      {savingOutcomeByCommandId[cmd.id] ? (
+                        <div className={styles.cardOutcomeSaving}>Saving…</div>
+                      ) : null}
+                    </div>
 
                     <div className={styles.cardActions}>
                       <label className={styles.statusLabel}>
@@ -980,6 +1193,7 @@ export function Board() {
           onClose={() => setSelected(null)}
           onRefreshCommands={refresh}
           setError={(msg) => setError(msg || null)}
+          outcomesRefreshNonce={drawerOutcomesNonce}
         />
       ) : null}
     </section>
