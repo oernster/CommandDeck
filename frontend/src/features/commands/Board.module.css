@@ -328,8 +328,26 @@
   visibility: visible;
 }
 
+.snapshotDeleteButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  opacity: 0.85;
+  visibility: visible;
+}
+
 .snapshotRow:hover .snapshotEditButton,
-.snapshotRow:focus-within .snapshotEditButton {
+.snapshotRow:focus-within .snapshotEditButton,
+.snapshotRow:hover .snapshotDeleteButton,
+.snapshotRow:focus-within .snapshotDeleteButton {
   opacity: 1;
 }
 
@@ -337,6 +355,13 @@
 .snapshotEditButton:focus-visible {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(90, 220, 140, 0.4);
+  outline: none;
+}
+
+.snapshotDeleteButton:hover,
+.snapshotDeleteButton:focus-visible {
+  background: rgba(255, 110, 110, 0.12);
+  border-color: rgba(255, 92, 92, 0.55);
   outline: none;
 }
 

@@ -43,3 +43,8 @@ export async function patchSnapshot(
   });
 }
 
+export async function deleteSnapshot(snapshotId: number): Promise<{ ok: true }> {
+  return await apiFetch<{ ok: true }>(`/api/snapshots/${snapshotId}`, {
+    method: "DELETE",
+  });
+}

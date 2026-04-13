@@ -93,3 +93,13 @@ def rename_snapshot(
         saved_at=epoch_seconds_to_iso8601_z(cast(int, row["saved_at"])),
     )
 
+
+@router.delete("/api/snapshots/{snapshot_id}")
+def delete_snapshot(
+    snapshot_id: int,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, bool]:
+    service = _service(conn)
+    service.delete(snapshot_id=snapshot_id)
+    return {"ok": True}
+

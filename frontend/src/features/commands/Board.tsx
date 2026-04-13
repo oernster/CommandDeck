@@ -21,11 +21,13 @@ import type { LatestSessionsByStageId, SessionActive } from "../../api/sessions"
 import { CreateCommandModal } from "./CreateCommandModal";
 import { CommandDrawer } from "./CommandDrawer";
 import { DestructiveGuardModal } from "../../components/DestructiveGuardModal";
+import { ConfirmDangerModal } from "../../components/ConfirmDangerModal";
 
 import { getBoard, resetBoard, updateBoard, updateStageLabels } from "../../api/board";
 import type { BoardState } from "../../api/board";
 import {
   listSnapshots,
+  deleteSnapshot,
   loadSnapshot,
   patchSnapshot,
   saveSnapshot,
@@ -103,6 +105,12 @@ export function Board() {
   const [renamingSnapshotId, setRenamingSnapshotId] = useState<number | null>(null);
   const [snapshotNameDraft, setSnapshotNameDraft] = useState<string>("");
   const snapshotRenameInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [deleteSnapshotModalOpen, setDeleteSnapshotModalOpen] = useState(false);
+  const [deleteSnapshotBusy, setDeleteSnapshotBusy] = useState(false);
+  const [snapshotToDelete, setSnapshotToDelete] = useState<SnapshotSummary | null>(
+    null
+  );
 
   const [focusedStageId, setFocusedStageId] = useState<StageId>("DESIGN");
   const [createFor, setCreateFor] = useState<StageId | null>(null);
@@ -318,6 +326,32 @@ export function Board() {
         <path
           fill="currentColor"
           d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm18.71-11.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.99-1.66Z"
+        />
+      </svg>
+    );
+  }
+
+  function trashSvg() {
+    return (
+      <svg
+        className={styles.icon}
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <path
+          d="M9 3h6m-8 4h10m-1 0-1 14H8L7 7"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M10 11v6m4-6v6"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
         />
       </svg>
     );
@@ -729,6 +763,38 @@ export function Board() {
     }
   }
 
+  function beginDeleteSnapshot(s: SnapshotSummary): void {
+    // Avoid mixing rename+delete interactions.
+    setRenamingSnapshotId(null);
+    setSnapshotNameDraft("");
+
+    setSnapshotToDelete(s);
+    setDeleteSnapshotModalOpen(true);
+  }
+
+  function closeDeleteSnapshotModal(): void {
+    setDeleteSnapshotModalOpen(false);
+    setSnapshotToDelete(null);
+    setDeleteSnapshotBusy(false);
+  }
+
+  async function confirmDeleteSnapshot(): Promise<void> {
+    if (!snapshotToDelete) return;
+
+    setError(null);
+    setDeleteSnapshotBusy(true);
+    try {
+      await deleteSnapshot(snapshotToDelete.id);
+      closeDeleteSnapshotModal();
+      await refresh();
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Snapshot could not be deleted";
+      setError(msg);
+    } finally {
+      setDeleteSnapshotBusy(false);
+    }
+  }
+
   async function onCommitBoardName(): Promise<void> {
     if (boardNameDraft === (board?.name ?? "")) return;
     setError(null);
@@ -1063,43 +1129,57 @@ export function Board() {
                           }}
                         />
                       ) : (
-                        <button
-                          type="button"
-                          className={styles.dropdownItem}
-                          onClick={() =>
-                            void startGuardedAction({
-                              type: "loadSnapshot",
-                              snapshotId: s.id,
-                              snapshotName: s.name,
-                            })
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "F2") {
+                        <>
+                          <button
+                            type="button"
+                            className={styles.snapshotEditButton}
+                            title="Rename (F2)"
+                            aria-label="Rename snapshot"
+                            onClick={(e) => {
                               e.preventDefault();
+                              e.stopPropagation();
                               beginRenameSnapshot(s);
-                            }
-                          }}
-                        >
-                          <span className={styles.snapshotRowText}>
-                            {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
-                          </span>
-                        </button>
-                      )}
+                            }}
+                          >
+                            {pencilSvg()}
+                          </button>
 
-                      {renamingSnapshotId === s.id ? null : (
-                        <button
-                          type="button"
-                          className={styles.snapshotEditButton}
-                          title="Rename (F2)"
-                          aria-label="Rename snapshot"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            beginRenameSnapshot(s);
-                          }}
-                        >
-                          {pencilSvg()}
-                        </button>
+                          <button
+                            type="button"
+                            className={styles.dropdownItem}
+                            onClick={() =>
+                              void startGuardedAction({
+                                type: "loadSnapshot",
+                                snapshotId: s.id,
+                                snapshotName: s.name,
+                              })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "F2") {
+                                e.preventDefault();
+                                beginRenameSnapshot(s);
+                              }
+                            }}
+                          >
+                            <span className={styles.snapshotRowText}>
+                              {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className={styles.snapshotDeleteButton}
+                            title="Delete"
+                            aria-label="Delete snapshot"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              beginDeleteSnapshot(s);
+                            }}
+                          >
+                            {trashSvg()}
+                          </button>
+                        </>
                       )}
                     </div>
                   ))
@@ -1134,6 +1214,18 @@ export function Board() {
           onSaveAndContinue={() => void onModalSaveAndContinue()}
           onContinueWithoutSaving={() => void onModalContinueWithoutSaving()}
           onCancel={closeDestructiveModal}
+        />
+      ) : null}
+
+      {deleteSnapshotModalOpen && snapshotToDelete ? (
+        <ConfirmDangerModal
+          title="Delete snapshot?"
+          body={`Are you sure you want to delete “${snapshotToDelete.name}”? This cannot be undone.`}
+          busy={deleteSnapshotBusy}
+          confirmLabel="Yes"
+          cancelLabel="No"
+          onConfirm={() => void confirmDeleteSnapshot()}
+          onCancel={closeDeleteSnapshotModal}
         />
       ) : null}
 

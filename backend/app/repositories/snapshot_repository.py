@@ -133,3 +133,8 @@ class SnapshotRepository:
             return None
         return {"id": int(row[0]), "name": str(row[1]), "saved_at": int(row[2])}
 
+    def delete(self, snapshot_id: int) -> bool:
+        cur = self._conn.execute("DELETE FROM snapshots WHERE id = ?", (snapshot_id,))
+        self._conn.commit()
+        return cur.rowcount > 0
+

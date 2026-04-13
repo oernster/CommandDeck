@@ -22,7 +22,7 @@ class SnapshotService:
     live-board persistence.
     """
 
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 4
 
     def __init__(
         self,
@@ -147,6 +147,11 @@ class SnapshotService:
         payload = json.loads(str(row["payload_json"]))
         self._apply_payload(payload)
 
+    def delete(self, *, snapshot_id: int) -> None:
+        if not self._snapshots.exists(snapshot_id):
+            raise NotFoundError("Snapshot not found")
+        self._snapshots.delete(snapshot_id)
+
     def _serialize_payload(self, *, board_name: str, saved_at: int) -> dict[str, Any]:
         # Commands: ordered by category+sort_index already.
         rows = self._conn.execute(
@@ -178,12 +183,26 @@ class SnapshotService:
             for r in srows
         ]
 
+        # Outcomes: include full history so panes can be restored on snapshot load.
+        orows = self._conn.execute(
+            "SELECT command_id, note, created_at FROM outcomes ORDER BY created_at DESC, id DESC"
+        ).fetchall()
+        outcomes = [
+            {
+                "command_id": int(r["command_id"]),
+                "note": str(r["note"]),
+                "created_at": int(r["created_at"]),
+            }
+            for r in orows
+        ]
+
         return {
             "schema_version": self.SCHEMA_VERSION,
             "board_name": board_name,
             "saved_at": saved_at,
             "commands": by_stage_id,
             "sessions": sessions,
+            "outcomes": outcomes,
         }
 
     @staticmethod
@@ -225,17 +244,47 @@ class SnapshotService:
                     )
                 commands_no_ids[str(stage_id)] = cleaned_items
 
+        # Outcomes are part of user-visible board state. For dedupe we include
+        # note strings only (ignore timestamps/ids) and align them to the command
+        # ordering in `commands`.
+        outcomes = payload.get("outcomes") or []
+        id_to_notes: dict[int, list[str]] = {}
+        if isinstance(outcomes, list):
+            for o in outcomes:
+                if not isinstance(o, dict):
+                    continue
+                cid = o.get("command_id")
+                note = str(o.get("note") or "")
+                if not isinstance(cid, int) or not note.strip():
+                    continue
+                id_to_notes.setdefault(int(cid), []).append(note)
+
+        outcomes_by_stage: dict[str, list[list[str]]] = {}
+        if isinstance(commands, dict):
+            for stage_id, items in commands.items():
+                if not isinstance(items, list):
+                    continue
+                aligned: list[list[str]] = []
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    cid = it.get("id")
+                    notes = id_to_notes.get(int(cid)) if isinstance(cid, int) else None
+                    aligned.append([str(n) for n in (notes or [])])
+                outcomes_by_stage[str(stage_id)] = aligned
+
         return {
             "schema_version": int(payload.get("schema_version", 1)),
             "board_name": str(payload.get("board_name") or "Untitled board"),
             "active_session_stage_id": active_session_stage_id,
             "commands": commands_no_ids,
+            "outcomes": outcomes_by_stage,
         }
 
     def _apply_payload(self, payload: dict[str, Any]) -> None:
         # Validate minimal schema.
         schema_version = int(payload.get("schema_version", 0))
-        if schema_version not in (1, 2, 3):
+        if schema_version not in (1, 2, 3, 4):
             raise ValueError("Unsupported snapshot schema")
 
         saved_at = payload.get("saved_at")
@@ -267,6 +316,12 @@ class SnapshotService:
         if sessions is None:
             raise ValueError("Invalid snapshot payload")
         if not isinstance(sessions, list):
+            raise ValueError("Invalid snapshot payload")
+
+        outcomes = payload.get("outcomes", [])
+        if outcomes is None:
+            outcomes = []
+        if not isinstance(outcomes, list):
             raise ValueError("Invalid snapshot payload")
 
         # Deterministic no-op branch for coverage: this is the most common case.
@@ -312,7 +367,7 @@ class SnapshotService:
                         raise ValueError("Invalid snapshot payload")
 
                     sort_index_by_cat[stage.value] += 1
-                    if schema_version == 3:
+                    if schema_version in (3, 4):
                         if not isinstance(cmd_id, int):
                             raise ValueError("Invalid snapshot payload")
                         self._conn.execute(
@@ -383,6 +438,32 @@ class SnapshotService:
                     "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) VALUES (?, ?, ?, ?)",
                     (command_id, stage_id_str, started_at, ended_at),
                 )
+
+            # Insert outcomes (v4+ only). Older snapshots did not preserve
+            # outcomes, so we keep behavior deterministic.
+            if schema_version >= 4:
+                for o in outcomes:
+                    if not isinstance(o, dict):
+                        raise ValueError("Invalid snapshot payload")
+                    cid = o.get("command_id")
+                    note = str(o.get("note") or "").strip()
+                    created_at = o.get("created_at")
+                    if not isinstance(cid, int) or not note:
+                        raise ValueError("Invalid snapshot payload")
+                    if not isinstance(created_at, int):
+                        raise ValueError("Invalid snapshot payload")
+
+                    exists = self._conn.execute(
+                        "SELECT 1 FROM commands WHERE id = ?",
+                        (int(cid),),
+                    ).fetchone()
+                    if exists is None:
+                        raise ValueError("Invalid snapshot payload")
+
+                    self._conn.execute(
+                        "INSERT INTO outcomes (command_id, note, created_at) VALUES (?, ?, ?)",
+                        (int(cid), note, int(created_at)),
+                    )
 
             self._conn.commit()
         except Exception:

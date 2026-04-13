@@ -203,7 +203,7 @@ def test_snapshot_service_structural_form_active_session_and_invalid_commands_sh
     """Hit SnapshotService._structural_form() branches around sessions/commands parsing."""
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "board_name": "Board",
         "saved_at": 123,
         # Bad shape: stage key maps to non-list -> should be ignored.
@@ -224,7 +224,7 @@ def test_snapshot_service_structural_form_empty_sessions_and_empty_commands() ->
     """Cover the `if not sessions: pass` + `if not commands: pass` branches."""
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "board_name": "Board",
         "saved_at": 123,
         "commands": {},
@@ -235,11 +235,37 @@ def test_snapshot_service_structural_form_empty_sessions_and_empty_commands() ->
     assert structural["commands"] == {}
 
 
+def test_snapshot_service_structural_form_outcomes_skips_invalid_entries() -> None:
+    """Cover outcome parsing branches in SnapshotService._structural_form()."""
+
+    payload = {
+        "schema_version": 4,
+        "board_name": "Board",
+        "saved_at": 123,
+        "commands": {
+            "DESIGN": [{"id": 1, "title": "T1", "status": "Not Started"}],
+            "BUILD": [],
+            "REVIEW": [],
+            "COMPLETE": [],
+        },
+        "sessions": [],
+        "outcomes": [
+            "not-a-dict",
+            {"command_id": "oops", "note": "x"},
+            {"command_id": 1, "note": "   "},
+            {"command_id": 1, "note": "ok"},
+        ],
+    }
+
+    structural = SnapshotService._structural_form(payload)
+    assert structural["outcomes"] == {"DESIGN": [["ok"]], "BUILD": [], "REVIEW": [], "COMPLETE": []}
+
+
 def test_snapshot_service_structural_form_skips_non_dict_session_then_finds_active() -> None:
     """Cover session loop path where first element is non-dict then active session is found."""
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "board_name": "Board",
         "saved_at": 123,
         "commands": {},
@@ -256,7 +282,7 @@ def test_snapshot_service_structural_form_commands_list_skips_non_dict_items() -
     """Cover the `if not isinstance(it, dict): continue` branch."""
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "board_name": "Board",
         "saved_at": 123,
         "commands": {
@@ -276,7 +302,7 @@ def test_snapshot_service_structural_form_commands_not_dict_is_ignored() -> None
     """Cover the `if isinstance(commands, dict)` false branch."""
 
     payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "board_name": "Board",
         "saved_at": 123,
         # Truthy but not a dict -> bypasses `or {}` fallback.
@@ -295,7 +321,7 @@ def test_snapshot_apply_payload_validation_error_board_name_blank(db_connection)
     with pytest.raises(ValueError, match="Invalid snapshot payload"):
         service._apply_payload(
             {
-                "schema_version": 3,
+                "schema_version": 4,
                 "board_name": "  ",
                 "saved_at": 1,
                 "commands": {},
@@ -311,11 +337,127 @@ def test_snapshot_apply_payload_validation_error_sessions_wrong_type(db_connecti
     with pytest.raises(ValueError, match="Invalid snapshot payload"):
         service._apply_payload(
             {
-                "schema_version": 3,
+                "schema_version": 4,
                 "board_name": "Board",
                 "saved_at": 1,
                 "commands": {},
                 "sessions": "nope",
+            }
+        )
+
+
+def test_snapshot_apply_payload_outcomes_none_is_ok(db_connection) -> None:
+    """Cover the `outcomes is None -> []` normalization branch."""
+
+    service = _service(db_connection)
+    service._apply_payload(
+        {
+            "schema_version": 4,
+            "board_name": "Board",
+            "saved_at": 1,
+            "commands": {"DESIGN": [], "BUILD": [], "REVIEW": [], "COMPLETE": []},
+            "sessions": [],
+            "outcomes": None,
+        }
+    )
+
+
+def test_snapshot_apply_payload_outcomes_invalid_element_is_error(db_connection) -> None:
+    """Cover `if not isinstance(o, dict)` branch in outcome insertion."""
+
+    service = _service(db_connection)
+    with pytest.raises(ValueError, match="Invalid snapshot payload"):
+        service._apply_payload(
+            {
+                "schema_version": 4,
+                "board_name": "Board",
+                "saved_at": 1,
+                "commands": {
+                    "DESIGN": [{"id": 1, "title": "A", "status": "Not Started"}],
+                    "BUILD": [],
+                    "REVIEW": [],
+                    "COMPLETE": [],
+                },
+                "sessions": [],
+                "outcomes": ["not-a-dict"],
+            }
+        )
+
+
+def test_snapshot_apply_payload_outcomes_missing_command_is_error(db_connection) -> None:
+    """Cover branch where an outcome references a missing command id."""
+
+    service = _service(db_connection)
+    with pytest.raises(ValueError, match="Invalid snapshot payload"):
+        service._apply_payload(
+            {
+                "schema_version": 4,
+                "board_name": "Board",
+                "saved_at": 1,
+                "commands": {"DESIGN": [], "BUILD": [], "REVIEW": [], "COMPLETE": []},
+                "sessions": [],
+                "outcomes": [{"command_id": 999, "note": "x", "created_at": 1}],
+            }
+        )
+
+
+def test_snapshot_apply_payload_outcomes_missing_created_at_is_error(db_connection) -> None:
+    """Cover branch where outcome created_at is not an int."""
+
+    service = _service(db_connection)
+    with pytest.raises(ValueError, match="Invalid snapshot payload"):
+        service._apply_payload(
+            {
+                "schema_version": 4,
+                "board_name": "Board",
+                "saved_at": 1,
+                "commands": {
+                    "DESIGN": [{"id": 1, "title": "A", "status": "Not Started"}],
+                    "BUILD": [],
+                    "REVIEW": [],
+                    "COMPLETE": [],
+                },
+                "sessions": [],
+                "outcomes": [{"command_id": 1, "note": "x", "created_at": "nope"}],
+            }
+        )
+
+
+def test_snapshot_apply_payload_outcomes_missing_note_is_error(db_connection) -> None:
+    """Cover branch where outcome note is blank/invalid."""
+
+    service = _service(db_connection)
+    with pytest.raises(ValueError, match="Invalid snapshot payload"):
+        service._apply_payload(
+            {
+                "schema_version": 4,
+                "board_name": "Board",
+                "saved_at": 1,
+                "commands": {
+                    "DESIGN": [{"id": 1, "title": "A", "status": "Not Started"}],
+                    "BUILD": [],
+                    "REVIEW": [],
+                    "COMPLETE": [],
+                },
+                "sessions": [],
+                "outcomes": [{"command_id": 1, "note": "   ", "created_at": 1}],
+            }
+        )
+
+
+def test_snapshot_apply_payload_validation_error_outcomes_wrong_type(db_connection) -> None:
+    """Cover snapshot payload validation branch for outcomes not list."""
+
+    service = _service(db_connection)
+    with pytest.raises(ValueError, match="Invalid snapshot payload"):
+        service._apply_payload(
+            {
+                "schema_version": 4,
+                "board_name": "Board",
+                "saved_at": 1,
+                "commands": {},
+                "sessions": [],
+                "outcomes": "nope",
             }
         )
 

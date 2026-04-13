@@ -120,6 +120,28 @@ def test_snapshot_save_list_and_dedupe_ignores_session_timing(client):
     assert items[0]["id"] == snap1["id"]
 
 
+def test_can_delete_snapshot_via_delete(client):
+    # Save a snapshot.
+    s1 = client.post("/api/snapshots")
+    assert s1.status_code == 201
+    snapshot_id = s1.json()["id"]
+
+    # Delete it.
+    rd = client.delete(f"/api/snapshots/{snapshot_id}")
+    assert rd.status_code == 200
+    assert rd.json() == {"ok": True}
+
+    # Ensure it is gone.
+    listed = client.get("/api/snapshots")
+    assert listed.status_code == 200
+    assert listed.json() == []
+
+
+def test_delete_snapshot_404_when_missing(client) -> None:
+    rd = client.delete("/api/snapshots/999999")
+    assert rd.status_code == 404
+
+
 def test_snapshot_repository_exists_false_when_missing(client):
     # SnapshotRepository.exists() is used by internal safety checks.
     r = client.get("/api/snapshots")
@@ -522,7 +544,7 @@ def test_snapshot_load_unknown_returns_404(client):
     assert r.status_code == 404
 
 
-def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(client):
+def test_snapshot_load_overwrites_commands_and_sessions_and_restores_outcomes(client):
     # Create a command and an outcome.
     rc = client.post(
         "/api/commands",
@@ -552,7 +574,7 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(clie
     rstop = client.post("/api/sessions/stop")
     assert rstop.status_code == 200
 
-    # Load snapshot => overwrite commands and sessions, clear outcomes.
+    # Load snapshot => overwrite commands and sessions, restore outcomes.
     rl = client.post(f"/api/snapshots/{snapshot_id}/load")
     assert rl.status_code == 200
     assert rl.json()["ok"] is True
@@ -562,10 +584,12 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(clie
     assert len(cmds) == 1
     assert cmds[0]["title"] == "Cmd"
 
-    # Outcomes cleared.
+    # Outcomes restored.
     outs = client.get(f"/api/commands/{cmd_id}/outcomes")
     assert outs.status_code == 200
-    assert outs.json() == []
+    data = outs.json()
+    assert len(data) == 1
+    assert data[0]["note"] == "hello"
 
     # Active session restored (snapshot had active session).
     active = client.get("/api/sessions/active")
