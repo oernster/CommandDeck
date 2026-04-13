@@ -1,4 +1,4 @@
-# <img width="40" height="40" alt="Command Deck" src="https://github.com/user-attachments/assets/086711ea-3ac5-4cd3-a26a-31e597847a70" /> Command Deck
+# <img width="40" height="40" alt="3f13ce9e-04e7-4ee1-a972-ef9274f3f75e-3" src="https://github.com/user-attachments/assets/9e00f679-932a-4255-b050-853e3f87217d" /> Command Deck
 
 Command Deck is a session-driven focus tool for moving **Tasks** through a fixed 4-stage workflow.
 
