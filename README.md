@@ -4,7 +4,7 @@ Command Deck is a session-driven focus tool for moving **Tasks** through a fixed
 
 It is intentionally minimal: one board, one active session, clear stage focus.
 
-<img width="3683" height="1894" alt="CommandDeck" src="https://github.com/user-attachments/assets/bd55ede9-e169-4e2e-a91c-941f7b5ff045" />
+<img width="3695" height="1904" alt="CommandDeck" src="https://github.com/user-attachments/assets/67a372f1-00ba-4e67-b8af-382eabe20301" />
 
 Docs:
 
