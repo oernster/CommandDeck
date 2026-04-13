@@ -32,6 +32,8 @@ import {
 } from "../../api/snapshots";
 import type { SnapshotSummary } from "../../api/snapshots";
 
+import commandDeckLogo from "../../assets/CommandDeck.png";
+
 import styles from "./Board.module.css";
 
 function statusClass(status: Status): string {
@@ -588,6 +590,12 @@ export function Board() {
       <div className={styles.headerRow}>
         <div className={styles.headerLeft}>
           <div className={styles.titleRow}>
+            <img
+              className={styles.titleLogo}
+              src={commandDeckLogo}
+              alt=""
+              aria-hidden="true"
+            />
             <h1 className={styles.title}>Command Deck</h1>
             <input
               ref={nameInputRef}
