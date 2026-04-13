@@ -16,6 +16,16 @@ export async function saveSnapshot(): Promise<SnapshotSummary> {
   });
 }
 
+export async function saveSnapshotWithOptions(options: {
+  name?: string;
+}): Promise<SnapshotSummary> {
+  const body = JSON.stringify({ name: options.name });
+  return await apiFetch<SnapshotSummary>("/api/snapshots", {
+    method: "POST",
+    body,
+  });
+}
+
 export async function loadSnapshot(snapshotId: number): Promise<{ ok: true }> {
   return await apiFetch<{ ok: true }>(`/api/snapshots/${snapshotId}/load`, {
     method: "POST",

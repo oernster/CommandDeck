@@ -8,17 +8,111 @@
   min-height: 100vh;
 }
 
-.headerRow {
+.controlSurface {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 10px;
 }
 
-.headerLeft {
+.titleBar {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.titleLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.titleRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.titleCenter {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stateCluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.stateSep {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.runtimeState {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.sessionStateText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.sessionStateButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sessionStateButton:hover,
+.sessionStateButton:focus-visible {
+  border-color: rgba(90, 220, 140, 0.45);
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.sessionGlyph {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sessionText {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sessionTimerInline {
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.70);
+}
+
+.titleMetaRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .helperRow {
@@ -32,61 +126,84 @@
   color: rgba(255, 255, 255, 0.62);
 }
 
-.titleRow {
-  display: flex;
-  /* Align the bottom edge of the board-name input with the title for a cleaner top-bar baseline. */
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
 
-.titleLogo {
+.opButton {
   height: 34px;
-  width: auto;
-  display: block;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+  justify-content: center;
 }
 
-.sessionRow {
+.opButton:hover,
+.opButton:focus-visible {
+  border-color: rgba(90, 220, 140, 0.95);
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.18) inset;
+  outline: none;
+}
+
+.opIcon {
+  font-size: 14px;
+  line-height: 1;
+  transform: translateY(-0.5px);
+}
+
+.stopButton {
+  /* Neutral by default; stop icon provides controlled emphasis. */
+}
+
+.stopIcon {
+  color: #d64545;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.stopButton:hover .stopIcon,
+.stopButton:focus-visible .stopIcon {
+  color: rgba(214, 69, 69, 0.95);
+}
+
+.stopButton:hover,
+.stopButton:focus-visible {
+  border-color: rgba(214, 69, 69, 0.55);
+  background: rgba(214, 69, 69, 0.10);
+  box-shadow: 0 0 0 1px rgba(214, 69, 69, 0.16) inset;
+}
+
+.stopButton:active {
+  background: rgba(214, 69, 69, 0.32);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.stopButton:active .stopIcon {
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.structuralRow {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  row-gap: 8px;
 }
 
-.sessionBadge {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.sessionTimer {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.70);
-}
-
-.tinyButton {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.globalButton {
+.structuralLeftButton,
+.structuralRightButton {
   height: 30px;
   padding: 0 12px;
   border-radius: 9px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(255, 255, 255, 0.88);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -95,10 +212,41 @@
   gap: 8px;
 }
 
-.greenHover:hover,
-.greenHover:focus-visible {
-  border-color: rgba(90, 220, 140, 0.95);
-  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.22) inset;
+.structuralLeftButton {
+  border-color: rgba(255, 110, 110, 0.28);
+  background: rgba(255, 110, 110, 0.08);
+}
+
+.structuralLeftButton:hover,
+.structuralLeftButton:focus-visible {
+  border-color: rgba(255, 92, 92, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.14) inset;
+  outline: none;
+}
+
+.structuralRightButton:hover,
+.structuralRightButton:focus-visible {
+  border-color: rgba(90, 220, 140, 0.55);
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.18) inset;
+  outline: none;
+}
+
+.dropdownChevron {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.dropdownDivider {
+  height: 1px;
+  margin: 6px 6px;
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 1px;
+}
+
+.titleLogo {
+  height: 34px;
+  width: auto;
+  display: block;
 }
 
 .icon {
@@ -228,41 +376,11 @@
   font-size: 13px;
 }
 
-.disabledRed {
-  border-color: rgba(255, 92, 92, 0.95) !important;
-  box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.22) inset;
-}
-
-.enabledGreen {
-  border-color: rgba(90, 220, 140, 0.95) !important;
-  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.20) inset;
-}
-
-/* Stop should remain neutral until hover, then show green affordance. */
-.stopGreenHover:hover,
-.stopGreenHover:focus-visible {
-  border-color: rgba(90, 220, 140, 0.95) !important;
-  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.22) inset;
-}
-
-.disabledRed:disabled {
-  cursor: not-allowed;
-  opacity: 0.75;
-}
-
-.title {
-  margin: 0;
-  font-size: 38px;
-  font-weight: 650;
-  letter-spacing: 0.2px;
-  line-height: 1;
-}
-
 .boardName {
   height: 34px;
-  min-width: 220px;
+  min-width: 180px;
   max-width: 520px;
-  flex: 1 1 260px;
+  flex: 1 1 320px;
   padding: 0 10px;
   border-radius: 10px;
   border: 1px solid rgba(175, 210, 255, 0.18);
@@ -270,6 +388,7 @@
   color: rgba(255, 255, 255, 0.92);
   font-size: 14px;
   font-weight: 560;
+  min-width: 0;
 }
 
 .boardNameEditButton {
@@ -307,11 +426,6 @@
   outline-offset: 2px;
 }
 
-.headerRight {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
 .muted {
   color: rgba(255, 255, 255, 0.65);
@@ -898,10 +1012,6 @@
     gap: 8px;
   }
 
-  .title {
-    font-size: 32px;
-  }
-
   .boardName {
     height: 32px;
     font-size: 13px;
@@ -962,7 +1072,6 @@
 
 .secondaryButton:focus-visible,
 .dangerButton:focus-visible,
-.tinyButton:focus-visible,
 .statusSelect:focus-visible {
   outline: 2px solid rgba(120, 170, 255, 0.9);
   outline-offset: 2px;

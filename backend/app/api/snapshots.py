@@ -8,7 +8,12 @@ from fastapi import APIRouter, Depends
 from app.core.database import get_db
 from app.domain.errors import NotFoundError, ValidationError
 from app.domain.models import epoch_seconds_to_iso8601_z
-from app.domain.schemas import SnapshotLoadResponse, SnapshotRenameRequest, SnapshotSummary
+from app.domain.schemas import (
+    SnapshotLoadResponse,
+    SnapshotRenameRequest,
+    SnapshotSaveRequest,
+    SnapshotSummary,
+)
 from app.repositories.board_repository import BoardRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.snapshot_repository import SnapshotRepository
@@ -41,9 +46,13 @@ def list_snapshots(conn: sqlite3.Connection = Depends(get_db)) -> list[SnapshotS
 
 
 @router.post("/api/snapshots", response_model=SnapshotSummary, status_code=201)
-def save_snapshot(conn: sqlite3.Connection = Depends(get_db)) -> SnapshotSummary:
+def save_snapshot(
+    payload: SnapshotSaveRequest | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> SnapshotSummary:
     service = _service(conn)
-    out = service.save_now()
+    name = payload.name if payload is not None else None
+    out = service.save_now(name=name)
     return SnapshotSummary(
         id=cast(int, out["id"]),
         name=cast(str, out["name"]),

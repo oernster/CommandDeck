@@ -20,15 +20,16 @@ import type { LatestSessionsByStageId, SessionActive } from "../../api/sessions"
 
 import { CreateCommandModal } from "./CreateCommandModal";
 import { CommandDrawer } from "./CommandDrawer";
-import { TrayRuntimeIndicator } from "../../components/TrayRuntimeIndicator";
+import { DestructiveGuardModal } from "../../components/DestructiveGuardModal";
 
-import { getBoard, updateBoard, updateStageLabels } from "../../api/board";
+import { getBoard, resetBoard, updateBoard, updateStageLabels } from "../../api/board";
 import type { BoardState } from "../../api/board";
 import {
   listSnapshots,
   loadSnapshot,
   patchSnapshot,
   saveSnapshot,
+  saveSnapshotWithOptions,
 } from "../../api/snapshots";
 import type { SnapshotSummary } from "../../api/snapshots";
 
@@ -88,6 +89,16 @@ export function Board() {
 
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+
+  type PendingDestructiveAction =
+    | { type: "reset" }
+    | { type: "loadSnapshot"; snapshotId: number; snapshotName?: string };
+
+  const [pendingAction, setPendingAction] = useState<PendingDestructiveAction | null>(
+    null
+  );
+  const [destructiveModalOpen, setDestructiveModalOpen] = useState(false);
+  const [destructiveBusy, setDestructiveBusy] = useState(false);
 
   const [renamingSnapshotId, setRenamingSnapshotId] = useState<number | null>(null);
   const [snapshotNameDraft, setSnapshotNameDraft] = useState<string>("");
@@ -607,20 +618,87 @@ export function Board() {
     }
   }
 
-  async function onLoadSnapshot(snapshotId: number): Promise<void> {
-    const ok = window.confirm(
-      "Load this snapshot? This will overwrite commands and sessions and clear outcomes/history."
-    );
-    if (!ok) return;
+  function formatGuardSnapshotName(prefix: string): string {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const yyyy = now.getFullYear();
+    const mm = pad(now.getMonth() + 1);
+    const dd = pad(now.getDate());
+    const hh = pad(now.getHours());
+    const mi = pad(now.getMinutes());
+    return `${prefix} - ${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  }
 
-    setError(null);
+  async function executePendingAction(action: PendingDestructiveAction): Promise<void> {
+    if (action.type === "reset") {
+      await resetBoard();
+      return;
+    }
+    await loadSnapshot(action.snapshotId);
+  }
+
+  function closeDestructiveModal(): void {
+    setDestructiveModalOpen(false);
+    setPendingAction(null);
+    setDestructiveBusy(false);
+  }
+
+  async function startGuardedAction(action: PendingDestructiveAction): Promise<void> {
+    // Guard rule: if board is empty, proceed immediately.
+    // Emptiness is canonical from backend via BoardResponse.is_empty.
+    if (board?.is_empty) {
+      setError(null);
+      setSnapshotsOpen(false);
+      try {
+        await executePendingAction(action);
+        await refresh();
+      } catch (e) {
+        const msg = isHttpError(e)
+          ? e.message
+          : action.type === "reset"
+            ? "Could not reset board"
+            : "Could not load snapshot";
+        setError(msg);
+      }
+      return;
+    }
+
+    // Non-empty: prompt.
+    setPendingAction(action);
     setSnapshotsOpen(false);
+    setDestructiveModalOpen(true);
+  }
+
+  async function onModalSaveAndContinue(): Promise<void> {
+    if (!pendingAction) return;
+    setError(null);
+    setDestructiveBusy(true);
     try {
-      await loadSnapshot(snapshotId);
+      const namePrefix =
+        pendingAction.type === "reset" ? "Before reset" : "Before loading snapshot";
+      await saveSnapshotWithOptions({ name: formatGuardSnapshotName(namePrefix) });
+      await executePendingAction(pendingAction);
+      closeDestructiveModal();
       await refresh();
     } catch (e) {
-      const msg = isHttpError(e) ? e.message : "Could not load snapshot";
+      const msg = isHttpError(e) ? e.message : "Operation failed";
       setError(msg);
+      setDestructiveBusy(false);
+    }
+  }
+
+  async function onModalContinueWithoutSaving(): Promise<void> {
+    if (!pendingAction) return;
+    setError(null);
+    setDestructiveBusy(true);
+    try {
+      await executePendingAction(pendingAction);
+      closeDestructiveModal();
+      await refresh();
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Operation failed";
+      setError(msg);
+      setDestructiveBusy(false);
     }
   }
 
@@ -664,22 +742,6 @@ export function Board() {
     }
   }
 
-  function diskSvg() {
-    return (
-      <svg
-        className={styles.icon}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          fill="currentColor"
-          d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4Zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM6 7V5h10v2H6Z"
-        />
-      </svg>
-    );
-  }
-
   const activeStageId: StageId | null =
     "active" in activeSession && activeSession.active === false
       ? null
@@ -697,7 +759,6 @@ export function Board() {
     return commands.find((c) => c.id === activeCommandId) ?? null;
   }, [activeCommandId, commands]);
 
-  const stopDisabled = activeStageId === null;
   const startDisabled = activeStageId !== null;
 
   function formatDuration(seconds: number): string {
@@ -722,9 +783,21 @@ export function Board() {
     return formatDuration((nowMs - startMs) / 1000);
   }, [activeSession, activeStageId, nowMs]);
 
-  function startSessionLabel(): string {
-    if (startDisabled) return "Start";
-    return startMode ? "Cancel" : "Start";
+  const RUNTIME_TOOLTIP =
+    "Command Deck runs in your system tray (bottom-right of your screen). You can reopen it from there at any time.";
+
+  function runtimeStateText(): string {
+    // There is no backend-provided runtime/tray signal today; we display the
+    // existing UI concept as a stable informational indicator.
+    return "● Running in tray";
+  }
+
+  function sessionStateParts(): { glyph: string; text: string; timeText: string | null } {
+    if (activeStageId === null) {
+      return { glyph: "○", text: "No active session", timeText: null };
+    }
+    const title = activeCommand?.title?.trim() || "Active session";
+    return { glyph: "▶", text: title, timeText: sessionTimerText };
   }
 
   async function onToggleStartMode(): Promise<void> {
@@ -780,16 +853,16 @@ export function Board() {
 
   return (
     <section className={styles.root}>
-      <div className={styles.headerRow}>
-        <div className={styles.headerLeft}>
-          <div className={styles.titleRow}>
+      <div className={styles.controlSurface}>
+        {/* Title row (state display) */}
+        <div className={styles.titleBar}>
+          <div className={styles.titleLeft}>
             <img
               className={styles.titleLogo}
               src={commandDeckLogo}
               alt=""
               aria-hidden="true"
             />
-            <h1 className={styles.title}>Command Deck</h1>
 
             <button
               type="button"
@@ -820,162 +893,249 @@ export function Board() {
               }}
             />
           </div>
-          <div className={styles.sessionRow}>
-            <span className={styles.sessionBadge}>
-              {activeStageId === null
-                ? "No active session"
-                : `Active: ${stageLabels[activeStageId]}${
-                    activeCommand ? ` · ${activeCommand.title}` : ""
-                  }`}
-            </span>
-            {activeStageId !== null && sessionTimerText ? (
-              <span className={styles.sessionTimer}>{sessionTimerText}</span>
-            ) : null}
 
-            <button
-              type="button"
-              className={`${styles.tinyButton} ${
-                startDisabled ? styles.disabledRed : styles.greenHover
-              }`}
-              disabled={startDisabled}
-              title={startDisabled ? "Stop the current session before starting another" : "Start a session by selecting a task"}
-              onClick={() => void onToggleStartMode()}
-            >
-              {startSessionLabel()}
-            </button>
-
-            <button
-              type="button"
-              className={`${styles.tinyButton} ${styles.stopGreenHover}`}
-              title={
-                activeStageId === null
-                  ? "Add a task"
-                  : `Add a task in ${stageLabels[effectiveFocusedStageId]}`
-              }
-              onClick={() => openCreate(effectiveFocusedStageId)}
-            >
-              Add
-            </button>
-
-            <button
-              type="button"
-              className={`${styles.tinyButton} ${
-                stopDisabled ? styles.disabledRed : styles.stopGreenHover
-              }`}
-              disabled={stopDisabled}
-              title={stopDisabled ? "No active session to stop" : "Stop active session"}
-              onClick={() => void onStopSession()}
-            >
-              Stop
-            </button>
-
-            <TrayRuntimeIndicator />
-
-            <button
-              type="button"
-              className={`${styles.globalButton} ${styles.greenHover}`}
-              title="Save snapshot"
-              onClick={() => void onSaveSnapshot()}
-            >
-              {diskSvg()}
-              <span>Save</span>
-            </button>
-
-            <div className={styles.snapshotsMenu}>
-              <button
-                type="button"
-                className={`${styles.globalButton} ${styles.greenHover}`}
-                onClick={() => setSnapshotsOpen((v) => !v)}
-              >
-                <span>Snapshots</span>
-              </button>
-              {snapshotsOpen ? (
-                <div className={styles.dropdown} role="menu" aria-label="Snapshots">
-                  {snapshots.length === 0 ? (
-                    <div className={styles.dropdownEmpty}>No snapshots yet</div>
-                  ) : (
-                    snapshots.map((s) => (
-                      <div
-                        key={s.id}
-                        className={styles.snapshotRow}
-                        role="none"
-                      >
-                        {renamingSnapshotId === s.id ? (
-                          <input
-                            ref={snapshotRenameInputRef}
-                            className={styles.snapshotRenameInput}
-                            value={snapshotNameDraft}
-                            aria-label="Snapshot name"
-                            onChange={(e) => setSnapshotNameDraft(e.target.value)}
-                            onBlur={() => void commitRenameSnapshot(s.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.currentTarget.blur();
-                              }
-                              if (e.key === "Escape") {
-                                setRenamingSnapshotId(null);
-                                setSnapshotNameDraft("");
-                              }
-                            }}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            className={styles.dropdownItem}
-                            onClick={() => void onLoadSnapshot(s.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === "F2") {
-                                e.preventDefault();
-                                beginRenameSnapshot(s);
-                              }
-                            }}
-                          >
-                            <span className={styles.snapshotRowText}>
-                              {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
-                            </span>
-                          </button>
-                        )}
-
-                        {renamingSnapshotId === s.id ? null : (
-                          <button
-                            type="button"
-                            className={styles.snapshotEditButton}
-                            title="Rename (F2)"
-                            aria-label="Rename snapshot"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              beginRenameSnapshot(s);
-                            }}
-                          >
-                            {pencilSvg()}
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className={styles.helperRow}>
-            {startMode ? (
-              <span className={styles.helperText}>
-                Select a task card to start a session. Press Esc to cancel.
-              </span>
+          {/* Operational controls (centered, state-aware) */}
+          <div className={styles.titleCenter}>
+            {activeStageId === null ? (
+              <>
+                <button
+                  type="button"
+                  className={styles.opButton}
+                  title="Start a session by selecting a task"
+                  onClick={() => void onToggleStartMode()}
+                >
+                  <span className={styles.opIcon} aria-hidden="true">
+                    ▶
+                  </span>
+                  <span>Start</span>
+                </button>
+                <button
+                  type="button"
+                  className={styles.opButton}
+                  title="Add a task"
+                  onClick={() => openCreate(effectiveFocusedStageId)}
+                >
+                  <span className={styles.opIcon} aria-hidden="true">
+                    +
+                  </span>
+                  <span>Add</span>
+                </button>
+              </>
             ) : (
-              <span className={styles.helperText}>
-                Tip: drag the grip on a card to reorder or move it between stages.
-              </span>
+              <>
+                <button
+                  type="button"
+                  className={`${styles.opButton} ${styles.stopButton}`}
+                  title="Stop active session"
+                  onClick={() => void onStopSession()}
+                >
+                  <span className={styles.stopIcon} aria-hidden="true">
+                    ■
+                  </span>
+                  <span>Stop</span>
+                </button>
+                <button
+                  type="button"
+                  className={styles.opButton}
+                  title={`Add a task in ${stageLabels[effectiveFocusedStageId]}`}
+                  onClick={() => openCreate(effectiveFocusedStageId)}
+                >
+                  <span className={styles.opIcon} aria-hidden="true">
+                    +
+                  </span>
+                  <span>Add</span>
+                </button>
+              </>
             )}
           </div>
+
+          <div className={styles.titleRight}>
+            {(() => {
+              const sess = sessionStateParts();
+              return (
+                <div className={styles.stateCluster}>
+                  <span className={styles.runtimeState} title={RUNTIME_TOOLTIP}>
+                    {runtimeStateText()}
+                  </span>
+                  <span className={styles.stateSep} aria-hidden="true">
+                    •
+                  </span>
+
+                  {activeCommand ? (
+                    <button
+                      type="button"
+                      className={styles.sessionStateButton}
+                      title="Open active task"
+                      onClick={() => setSelected(activeCommand)}
+                    >
+                      <span className={styles.sessionGlyph} aria-hidden="true">
+                        {sess.glyph}
+                      </span>
+                      <span className={styles.sessionText}>{sess.text}</span>
+                    </button>
+                  ) : (
+                    <span className={styles.sessionStateText}>
+                      <span className={styles.sessionGlyph} aria-hidden="true">
+                        {sess.glyph}
+                      </span>
+                      <span className={styles.sessionText}>{sess.text}</span>
+                    </span>
+                  )}
+
+                  {sess.timeText ? (
+                    <>
+                      <span className={styles.stateSep} aria-hidden="true">
+                        •
+                      </span>
+                      <span className={styles.sessionTimerInline}>{sess.timeText}</span>
+                    </>
+                  ) : null}
+                </div>
+              );
+            })()}
+
+            <div className={styles.titleMetaRight}>
+              {loading ? <span className={styles.muted}>Loading…</span> : null}
+              {error ? <span className={styles.error}>{error}</span> : null}
+            </div>
+          </div>
         </div>
-        <div className={styles.headerRight}>
-          {loading ? <span className={styles.muted}>Loading…</span> : null}
-          {error ? <span className={styles.error}>{error}</span> : null}
+
+        {/* Row 2 — structural controls (left/right split) */}
+        <div className={styles.structuralRow}>
+          <button
+            type="button"
+            className={styles.structuralLeftButton}
+            onClick={() => void startGuardedAction({ type: "reset" })}
+            title="Reset board"
+          >
+            Reset board
+          </button>
+
+          <div className={styles.snapshotsMenu}>
+            <button
+              type="button"
+              className={styles.structuralRightButton}
+              onClick={() => setSnapshotsOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={snapshotsOpen}
+            >
+              <span>Snapshots</span>
+              <span className={styles.dropdownChevron} aria-hidden="true">
+                ▼
+              </span>
+            </button>
+            {snapshotsOpen ? (
+              <div className={styles.dropdown} role="menu" aria-label="Snapshots">
+                <button
+                  type="button"
+                  className={styles.dropdownItem}
+                  onClick={() => {
+                    setSnapshotsOpen(false);
+                    void onSaveSnapshot();
+                  }}
+                >
+                  Save snapshot
+                </button>
+                <div className={styles.dropdownDivider} aria-hidden="true" />
+
+                {snapshots.length === 0 ? (
+                  <div className={styles.dropdownEmpty}>No snapshots yet</div>
+                ) : (
+                  snapshots.map((s) => (
+                    <div key={s.id} className={styles.snapshotRow} role="none">
+                      {renamingSnapshotId === s.id ? (
+                        <input
+                          ref={snapshotRenameInputRef}
+                          className={styles.snapshotRenameInput}
+                          value={snapshotNameDraft}
+                          aria-label="Snapshot name"
+                          onChange={(e) => setSnapshotNameDraft(e.target.value)}
+                          onBlur={() => void commitRenameSnapshot(s.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.currentTarget.blur();
+                            }
+                            if (e.key === "Escape") {
+                              setRenamingSnapshotId(null);
+                              setSnapshotNameDraft("");
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.dropdownItem}
+                          onClick={() =>
+                            void startGuardedAction({
+                              type: "loadSnapshot",
+                              snapshotId: s.id,
+                              snapshotName: s.name,
+                            })
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "F2") {
+                              e.preventDefault();
+                              beginRenameSnapshot(s);
+                            }
+                          }}
+                        >
+                          <span className={styles.snapshotRowText}>
+                            {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
+                          </span>
+                        </button>
+                      )}
+
+                      {renamingSnapshotId === s.id ? null : (
+                        <button
+                          type="button"
+                          className={styles.snapshotEditButton}
+                          title="Rename (F2)"
+                          aria-label="Rename snapshot"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            beginRenameSnapshot(s);
+                          }}
+                        >
+                          {pencilSvg()}
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className={styles.helperRow}>
+          {startMode ? (
+            <span className={styles.helperText}>
+              Select a task card to start a session. Press Esc to cancel.
+            </span>
+          ) : (
+            <span className={styles.helperText}>
+              Tip: drag the grip on a card to reorder or move it between stages.
+            </span>
+          )}
         </div>
       </div>
+
+      {destructiveModalOpen && pendingAction ? (
+        <DestructiveGuardModal
+          title={pendingAction.type === "reset" ? "Reset board?" : "Load snapshot?"}
+          body={
+            pendingAction.type === "reset"
+              ? "Your current board has content. Do you want to save a snapshot before clearing it?"
+              : "Loading this snapshot will replace your current board. Do you want to save a snapshot first?"
+          }
+          busy={destructiveBusy}
+          onSaveAndContinue={() => void onModalSaveAndContinue()}
+          onContinueWithoutSaving={() => void onModalContinueWithoutSaving()}
+          onCancel={closeDestructiveModal}
+        />
+      ) : null}
 
       <div
         className={`${styles.board} ${activeStageId ? styles.boardHasActive : ""} ${

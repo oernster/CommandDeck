@@ -4,6 +4,7 @@ export type BoardState = {
   name: string;
   user_named: boolean;
   is_new_unnamed: boolean;
+  is_empty: boolean;
   stage_labels: Record<string, string> | null;
 };
 
@@ -24,6 +25,12 @@ export async function updateStageLabels(input: {
   return await apiFetch<BoardState>("/api/board/stage-labels", {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+export async function resetBoard(): Promise<{ ok: true }> {
+  return await apiFetch<{ ok: true }>("/api/board/reset", {
+    method: "POST",
   });
 }
 

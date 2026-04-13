@@ -25,6 +25,7 @@ def get_board(conn: sqlite3.Connection = Depends(get_db)) -> BoardResponse:
         name=str(data["name"]),
         user_named=bool(data["user_named"]),
         is_new_unnamed=bool(data["is_new_unnamed"]),
+        is_empty=bool(data["is_empty"]),
         stage_labels=cast(dict[str, str] | None, data.get("stage_labels")),
     )
 
@@ -40,6 +41,7 @@ def update_board(
         name=str(data["name"]),
         user_named=bool(data["user_named"]),
         is_new_unnamed=bool(data["is_new_unnamed"]),
+        is_empty=bool(data["is_empty"]),
         stage_labels=cast(dict[str, str] | None, data.get("stage_labels")),
     )
 
@@ -63,6 +65,14 @@ def update_stage_labels(
         name=str(data["name"]),
         user_named=bool(data["user_named"]),
         is_new_unnamed=bool(data["is_new_unnamed"]),
+        is_empty=bool(data["is_empty"]),
         stage_labels=cast(dict[str, str] | None, data.get("stage_labels")),
     )
+
+
+@router.post("/api/board/reset")
+def reset_board(conn: sqlite3.Connection = Depends(get_db)) -> dict[str, bool]:
+    service = _service(conn)
+    service.reset()
+    return {"ok": True}
 

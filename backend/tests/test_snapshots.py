@@ -15,6 +15,7 @@ def test_board_default_name_is_untitled(client):
     assert data["name"] == "Untitled board"
     assert data["user_named"] is False
     assert data["is_new_unnamed"] is True
+    assert data["is_empty"] is True
 
 
 def test_can_update_board_name(client):
@@ -24,6 +25,7 @@ def test_can_update_board_name(client):
     assert data["name"] == "Morning Setup"
     assert data["user_named"] is True
     assert data["is_new_unnamed"] is False
+    assert data["is_empty"] is True
 
 
 def test_can_update_stage_labels(client):

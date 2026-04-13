@@ -42,3 +42,22 @@ class BoardRepository:
         outs = int(self._conn.execute("SELECT COUNT(*) FROM outcomes").fetchone()[0])
         return cmds == 0 and sess == 0 and outs == 0
 
+    def reset_live_state(self) -> None:
+        """Clear operational state for the single live board.
+
+        Deletes outcomes, sessions and commands, but preserves the singleton
+        `board_state` row, stage label overrides, and saved snapshots.
+        """
+
+        self._conn.execute("BEGIN")
+        try:
+            # Explicit deletes to match snapshot-load semantics and avoid relying
+            # on FK cascade for user-visible behavior.
+            self._conn.execute("DELETE FROM outcomes")
+            self._conn.execute("DELETE FROM sessions")
+            self._conn.execute("DELETE FROM commands")
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+

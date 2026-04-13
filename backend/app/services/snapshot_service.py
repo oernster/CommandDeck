@@ -40,8 +40,16 @@ class SnapshotService:
     def list(self) -> list[SnapshotSummaryRow]:
         return self._snapshots.list()
 
-    def save_now(self) -> SnapshotSummaryRow:
-        """Serialize current DB state and upsert a snapshot with dedupe."""
+    def save_now(self, *, name: str | None = None) -> SnapshotSummaryRow:
+        """Serialize current DB state and upsert a snapshot with dedupe.
+
+        When `name` is provided and non-empty after trimming, it is used as the
+        snapshot name for the insert path.
+
+        If dedupe finds an existing snapshot by structural hash, the existing
+        snapshot name is preserved (explicit naming does not rename an existing
+        snapshot).
+        """
 
         now_epoch_seconds = int(
             self._conn.execute("SELECT CAST(strftime('%s','now') AS INTEGER)").fetchone()[
@@ -56,7 +64,10 @@ class SnapshotService:
             else "Untitled board"
         )
 
-        snapshot_name = self._build_default_snapshot_name(board_name=board_name)
+        cleaned_name = (name.strip() if isinstance(name, str) else "")
+        snapshot_name = (
+            cleaned_name if cleaned_name else self._build_default_snapshot_name(board_name=board_name)
+        )
 
         payload = self._serialize_payload(board_name=board_name, saved_at=now_epoch_seconds)
         structural = self._structural_form(payload)

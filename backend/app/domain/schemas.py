@@ -118,6 +118,7 @@ class BoardResponse(BaseModel):
     name: str
     user_named: bool
     is_new_unnamed: bool
+    is_empty: bool
     stage_labels: dict[str, str] | None = None
 
 
@@ -133,6 +134,12 @@ class SnapshotSummary(BaseModel):
     id: int
     name: str
     saved_at: str
+
+
+class SnapshotSaveRequest(BaseModel):
+    # Optional explicit name. When omitted/blank, the service uses its existing
+    # default naming scheme.
+    name: str | None = None
 
 
 class SnapshotLoadResponse(BaseModel):

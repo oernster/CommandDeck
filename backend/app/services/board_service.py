@@ -13,6 +13,8 @@ class BoardService:
     def get(self) -> dict[str, object]:
         row = self._board.get()
 
+        is_empty = self._board.is_empty()
+
         name = cast(str | None, row["name"])
         user_named_int = cast(int, row["user_named"])
         stage_labels_json = cast(str | None, row.get("stage_labels_json"))
@@ -26,7 +28,7 @@ class BoardService:
 
         # "Newly created unnamed board" heuristic: user hasn't named it and it has
         # no operational content yet.
-        is_new_unnamed = (not user_named) and self._board.is_empty()
+        is_new_unnamed = (not user_named) and is_empty
 
         stage_labels: dict[str, str] | None = None
         if stage_labels_json is not None and str(stage_labels_json).strip():
@@ -44,9 +46,13 @@ class BoardService:
             "name": effective_name,
             "user_named": user_named,
             "is_new_unnamed": is_new_unnamed,
+            "is_empty": is_empty,
             "stage_labels": stage_labels,
             "created_at": created_at,
         }
+
+    def reset(self) -> None:
+        self._board.reset_live_state()
 
     def set_name(self, *, name: str) -> dict[str, object]:
         cleaned = name.strip()
