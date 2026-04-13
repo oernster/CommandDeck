@@ -121,6 +121,8 @@ class SnapshotService:
                     if isinstance(v, str) and v.strip():
                         return v.strip()
             except Exception:
+                # Best-effort only; corrupt stage label JSON should not prevent
+                # snapshot operations.
                 pass
 
         # Fallback: stable title-cased stage id.

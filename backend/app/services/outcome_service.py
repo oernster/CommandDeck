@@ -25,6 +25,11 @@ class OutcomeService:
             raise NotFoundError("Command not found")
         return self._outcomes.list_for_command(command_id)
 
+    def latest_for_commands(self, command_ids: list[int]) -> dict[int, Outcome]:
+        # Intentionally does not validate existence of each command id; the
+        # caller may send ids that were just deleted or are out-of-scope.
+        return self._outcomes.latest_for_commands(command_ids)
+
     def create(self, *, command_id: int, note: str) -> Outcome:
         if self._commands.get(command_id) is None:
             raise NotFoundError("Command not found")

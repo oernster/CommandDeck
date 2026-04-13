@@ -10,6 +10,7 @@ from app.repositories.board_repository import BoardRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.snapshot_repository import SnapshotRepository
 from app.services.snapshot_service import SnapshotService
+from app.domain.enums import StageId
 
 
 def _service(conn: sqlite3.Connection) -> SnapshotService:
@@ -155,6 +156,47 @@ def test_board_service_ignores_stage_labels_json_when_values_not_strings(db_conn
 
     out = BoardService(BoardRepository(conn)).get()
     assert out["stage_labels"] is None
+
+
+def test_snapshot_service_get_stage_label_falls_back_when_stage_labels_json_not_dict(
+    db_connection,
+) -> None:
+    """Cover `_get_stage_label()` branch where parsed JSON is not a dict."""
+
+    conn = db_connection
+    conn.execute(
+        "UPDATE board_state SET stage_labels_json = ? WHERE id = 1",
+        (json.dumps(["DESIGN", "Plan"]),),
+    )
+    conn.commit()
+
+    svc = _service(conn)
+    assert svc._get_stage_label(StageId.DESIGN) == "Design"
+
+
+def test_snapshot_service_get_stage_label_falls_back_when_value_missing_or_blank(
+    db_connection,
+) -> None:
+    """Cover `_get_stage_label()` branch where dict value is missing/blank."""
+
+    conn = db_connection
+
+    # Missing key -> v is None.
+    conn.execute(
+        "UPDATE board_state SET stage_labels_json = ? WHERE id = 1",
+        (json.dumps({"BUILD": "Build"}),),
+    )
+    conn.commit()
+    svc = _service(conn)
+    assert svc._get_stage_label(StageId.DESIGN) == "Design"
+
+    # Blank value -> v is a string but `v.strip()` is empty.
+    conn.execute(
+        "UPDATE board_state SET stage_labels_json = ? WHERE id = 1",
+        (json.dumps({"DESIGN": "   "}),),
+    )
+    conn.commit()
+    assert svc._get_stage_label(StageId.DESIGN) == "Design"
 
 
 def test_snapshot_service_structural_form_active_session_and_invalid_commands_shape() -> None:

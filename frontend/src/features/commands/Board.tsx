@@ -32,6 +32,9 @@ import {
 } from "../../api/snapshots";
 import type { SnapshotSummary } from "../../api/snapshots";
 
+import type { Outcome } from "../../api/outcomes";
+import { getLatestOutcomes } from "../../api/outcomes";
+
 import commandDeckLogo from "../../assets/CommandDeck.png";
 
 import styles from "./Board.module.css";
@@ -53,6 +56,10 @@ export function Board() {
   const [commands, setCommands] = useState<Command[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [latestOutcomeByCommandId, setLatestOutcomeByCommandId] = useState<
+    Record<number, Outcome>
+  >({});
 
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<
@@ -149,6 +156,9 @@ export function Board() {
 
       const items = await listCommands();
       setCommands(items);
+
+      const latestOutcomes = await getLatestOutcomes(items.map((c) => c.id));
+      setLatestOutcomeByCommandId(latestOutcomes);
 
       const s = await getActiveSession();
       setActiveSession(s);
@@ -910,6 +920,12 @@ export function Board() {
                         title={cmd.status}
                       />
                     </div>
+
+                    {latestOutcomeByCommandId[cmd.id]?.note ? (
+                      <div className={styles.cardOutcome}>
+                        {latestOutcomeByCommandId[cmd.id]!.note}
+                      </div>
+                    ) : null}
 
                     <div className={styles.cardActions}>
                       <label className={styles.statusLabel}>

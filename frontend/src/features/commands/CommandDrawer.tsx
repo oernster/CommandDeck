@@ -116,6 +116,7 @@ export function CommandDrawer(props: CommandDrawerProps) {
       await createOutcome(command.id, { note: trimmed });
       setNote("");
       await refreshOutcomes();
+      await onRefreshCommands();
       noteRef.current?.focus();
     } catch (err) {
       const msg = isHttpError(err) ? err.message : "Could not save outcome";
@@ -134,6 +135,7 @@ export function CommandDrawer(props: CommandDrawerProps) {
     try {
       await deleteOutcome(outcomeId);
       await refreshOutcomes();
+      await onRefreshCommands();
     } catch (err) {
       const msg = isHttpError(err) ? err.message : "Could not delete outcome";
       setError(msg);

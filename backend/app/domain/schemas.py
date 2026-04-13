@@ -65,6 +65,15 @@ class OutcomeResponse(BaseModel):
         )
 
 
+class OutcomesLatestRequest(BaseModel):
+    command_ids: list[int]
+
+
+class OutcomesLatestResponse(BaseModel):
+    # Key is command_id. Value is the latest outcome for that command.
+    by_command_id: dict[int, OutcomeResponse]
+
+
 class SessionStartRequest(BaseModel):
     command_id: int
 

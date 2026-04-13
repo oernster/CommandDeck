@@ -535,6 +535,17 @@
   gap: 8px;
 }
 
+.cardOutcome {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.70);
+  text-align: justify;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
 .cardTitle {
   font-size: 13px;
   line-height: 1.3;

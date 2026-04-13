@@ -27,3 +27,16 @@ export async function deleteOutcome(outcomeId: number): Promise<{ ok: true }> {
   });
 }
 
+export async function getLatestOutcomes(commandIds: number[]): Promise<Record<number, Outcome>> {
+  if (commandIds.length === 0) return {};
+
+  const resp = await apiFetch<{ by_command_id: Record<number, Outcome> }>(
+    "/api/outcomes/latest",
+    {
+      method: "POST",
+      body: JSON.stringify({ command_ids: commandIds }),
+    }
+  );
+  return resp.by_command_id ?? {};
+}
+
