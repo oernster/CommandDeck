@@ -794,6 +794,20 @@ export function Board() {
               aria-hidden="true"
             />
             <h1 className={styles.title}>Command Deck</h1>
+
+            <button
+              type="button"
+              className={styles.boardNameEditButton}
+              title="Rename board"
+              aria-label="Rename board"
+              onClick={() => {
+                nameInputRef.current?.focus();
+                nameInputRef.current?.select();
+              }}
+            >
+              {pencilSvg()}
+            </button>
+
             <input
               ref={nameInputRef}
               className={`${styles.boardName} ${

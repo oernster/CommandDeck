@@ -272,6 +272,31 @@
   font-weight: 560;
 }
 
+.boardNameEditButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(0, 0, 0, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+}
+
+.boardNameEditButton:hover,
+.boardNameEditButton:focus-visible {
+  border-color: rgba(90, 220, 140, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.boardNameEditButton:focus-visible {
+  box-shadow: 0 0 0 2px rgba(120, 170, 255, 0.65);
+}
+
 .boardNameCue {
   border-color: rgba(236, 170, 78, 0.55);
   box-shadow: 0 0 0 1px rgba(236, 170, 78, 0.18) inset;
