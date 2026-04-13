@@ -99,6 +99,19 @@ def create_app() -> FastAPI:
                 name="assets",
             )
 
+        # Serve common root-level static files emitted by Vite (copied from
+        # `frontend/public/*` into `dist/*`).
+        favicon_ico = dist_dir / "favicon.ico"
+        if favicon_ico.is_file():
+
+            @app.get("/favicon.ico")
+            def _favicon() -> FileResponse:
+                # Allow caching: browsers request this frequently.
+                return FileResponse(
+                    str(favicon_ico),
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+
         @app.get("/")
         def _index() -> FileResponse:
             return FileResponse(str(index_html), headers=no_cache_html_headers)

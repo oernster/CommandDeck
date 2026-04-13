@@ -31,6 +31,7 @@ def test_static_serving_index_assets_and_spa_fallback(
     (dist_dir / "index.html").write_text(
         "<!doctype html><html><body>OK</body></html>", encoding="utf-8"
     )
+    (dist_dir / "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
     (assets_dir / "app.js").write_text("console.log('ok')", encoding="utf-8")
 
     monkeypatch.setenv("COMMANDDECK_FRONTEND_DIST_DIR", str(dist_dir))
@@ -49,6 +50,10 @@ def test_static_serving_index_assets_and_spa_fallback(
         assert asset.status_code == 200
         assert "console.log" in asset.text
         assert asset.headers.get("cache-control") == ASSETS_CACHE_VALUE
+
+        favicon = client.get("/favicon.ico")
+        assert favicon.status_code == 200
+        assert favicon.headers.get("cache-control") is not None
 
         # Missing asset should not receive the immutable cache header.
         missing = client.get("/assets/missing.js")
