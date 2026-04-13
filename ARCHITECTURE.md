@@ -2,7 +2,9 @@
 
 This document describes the **implemented runtime architecture** as it exists in the repository.
 
-Scope: FastAPI backend + React frontend + tray launcher + packaged runtime behavior. Installer/build-pipeline architecture is intentionally out of scope.
+Scope: FastAPI backend + React frontend + tray launcher + packaged runtime behavior.
+
+Build instructions, packaging steps, and developer workflows live in [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md).
 
 Principles: local-first, minimal surface area, deterministic behaviour, explicit operations.
 
