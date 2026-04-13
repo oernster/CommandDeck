@@ -1,9 +1,8 @@
-
 # Command Deck — Runtime Architecture (current)
 
 This document describes the **implemented runtime architecture** as it exists in the repository.
 
-Scope: FastAPI backend + React frontend + local tray launcher. Packaging/installer architecture is intentionally out of scope.
+Scope: FastAPI backend + React frontend + tray launcher + packaged runtime behavior. Installer/build-pipeline architecture is intentionally out of scope.
 
 Principles: local-first, minimal surface area, deterministic behaviour, explicit operations.
 
@@ -65,16 +64,21 @@ Routers:
 Notable endpoints (see router implementations for exact request/response schemas):
 
 - Commands
+
   - List: [`list_commands()`](backend/app/api/commands.py:27) (`GET /api/commands`), optional `stage_id` + `status` filters.
   - Create: [`create_command()`](backend/app/api/commands.py:52) (`POST /api/commands`).
   - Update: [`update_command()`](backend/app/api/commands.py:89) (`PATCH /api/commands/{id}`).
   - Delete: [`delete_command()`](backend/app/api/commands.py:119) (`DELETE /api/commands/{id}`).
   - Reorder (persisted ordering): [`reorder_commands()`](backend/app/api/commands.py:131) (`POST /api/commands/reorder`).
+
 - Outcomes
+
   - List for command: [`list_outcomes()`](backend/app/api/outcomes.py:28) (`GET /api/commands/{command_id}/outcomes`).
   - Create: [`create_outcome()`](backend/app/api/outcomes.py:41) (`POST /api/commands/{command_id}/outcomes`).
   - Delete: [`delete_outcome()`](backend/app/api/outcomes.py:52) (`DELETE /api/outcomes/{outcome_id}`).
+
 - Sessions
+
   - List: [`list_sessions()`](backend/app/api/sessions.py:27) (`GET /api/sessions`), optional `stage_id` and `active`.
   - Active session: [`get_active_session()`](backend/app/api/sessions.py:43) (`GET /api/sessions/active`).
   - Latest session per stage: [`latest_by_stage_id()`](backend/app/api/sessions.py:54) (`GET /api/sessions/latest-by-stage-id`).
@@ -82,14 +86,17 @@ Notable endpoints (see router implementations for exact request/response schemas
     - Start requires selecting a task/command: request body is [`SessionStartRequest`](backend/app/domain/schemas.py:68) (`{command_id: int}`).
 
 - Board
+
   - Get: [`get_board()`](backend/app/api/board.py:20) (`GET /api/board`).
   - Rename board: [`update_board()`](backend/app/api/board.py:32) (`PATCH /api/board`).
   - Update stage labels (renameable UI labels persisted per board): [`update_stage_labels()`](backend/app/api/board.py:47) (`PATCH /api/board/stage-labels`).
 
 - Snapshots
+
   - List: [`list_snapshots()`](backend/app/api/snapshots.py:26) (`GET /api/snapshots`).
-  - Save-now: [`save_snapshot()`](backend/app/api/snapshots.py:40) (`POST /api/snapshots`).
-  - Load: [`load_snapshot()`](backend/app/api/snapshots.py:51) (`POST /api/snapshots/{snapshot_id}/load`).
+  - Save-now: [`save_snapshot()`](backend/app/api/snapshots.py:43) (`POST /api/snapshots`).
+  - Load: [`load_snapshot()`](backend/app/api/snapshots.py:54) (`POST /api/snapshots/{snapshot_id}/load`).
+  - Rename: [`rename_snapshot()`](backend/app/api/snapshots.py:64) (`PATCH /api/snapshots/{snapshot_id}`).
 
 ### 1.5 Persistence (SQLite)
 
@@ -179,7 +186,29 @@ The dev/source tray launcher lives under [`backend/app/tray/`](backend/app/tray/
 - Entry point module: [`backend/app/tray/__main__.py`](backend/app/tray/__main__.py:1)
 - Runtime logic (starts uvicorn as a background process and hosts a tray icon): [`run_tray()`](backend/app/tray/runtime.py:161)
 
-## 4) Testing and quality gates
+## 4) Packaged runtime entrypoint (Windows-only)
+
+In addition to the dev/source tray launcher, the Windows release ships a packaged
+runtime executable (`CommandDeck.exe`). Its entrypoint is
+[`backend/runtime_entry.py`](backend/runtime_entry.py:1).
+
+Key behaviors (implemented, not aspirational):
+
+- **Single-instance guard**: uses a Windows file lock under LocalAppData to avoid
+  multiple running instances. See [`_SingleInstanceLock.acquire()`](backend/runtime_entry.py:195).
+- **Backend server in-process**: starts uvicorn via [`BackendServer.start()`](backend/runtime_entry.py:242)
+  running the FastAPI app from [`app`](backend/app/main.py:127) on
+  `http://127.0.0.1:8001/`.
+- **Frontend static self-heal**: on first run, attempts to restore a missing
+  `frontend/dist` directory from embedded resources. See
+  [`_ensure_frontend_dist_present()`](backend/runtime_entry.py:94).
+- **Runtime logging**: writes best-effort diagnostics next to the EXE at
+  `CommandDeck-runtime.log`. See [`_runtime_log_path()`](backend/runtime_entry.py:52)
+  and [`_debug_log()`](backend/runtime_entry.py:136).
+- **Browser behavior**: opens the UI URL on launch unless `--no-browser` (or
+  `--background`) is provided. See [`main()`](backend/runtime_entry.py:353).
+
+## 5) Testing and quality gates
 
 Backend tests are full-stack (API → service → repo → real SQLite) and enforce 100% coverage via [`pyproject.toml`](pyproject.toml:1).
 
