@@ -10,9 +10,11 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 
 from app.api.commands import router as commands_router
+from app.api.board import router as board_router
 from app.api.health import router as health_router
 from app.api.outcomes import router as outcomes_router
 from app.api.sessions import router as sessions_router
+from app.api.snapshots import router as snapshots_router
 from app.core.lifecycle import init_database_file
 from app.core.static_files import AssetsStaticFiles, frontend_dist_dir
 from app.domain.errors import NotFoundError, ValidationError
@@ -57,9 +59,11 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=404, content={"error": str(exc)})
 
     app.include_router(health_router)
+    app.include_router(board_router)
     app.include_router(commands_router)
     app.include_router(outcomes_router)
     app.include_router(sessions_router)
+    app.include_router(snapshots_router)
 
     @app.middleware("http")
     async def _api_cache_control(request: Request, call_next):

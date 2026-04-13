@@ -21,6 +21,13 @@
   gap: 4px;
 }
 
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .sessionRow {
   display: flex;
   align-items: center;
@@ -49,13 +56,99 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
+}
+
+.globalButton {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.greenHover:hover,
+.greenHover:focus-visible {
+  border-color: rgba(90, 220, 140, 0.95);
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.22) inset;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.snapshotsMenu {
+  position: relative;
+}
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 320px;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 12px;
+  background: rgba(10, 25, 55, 0.98);
+  border: 1px solid rgba(175, 210, 255, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  z-index: 50;
+}
+
+.dropdownItem {
+  width: 100%;
+  text-align: left;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdownItem:hover,
+.dropdownItem:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(90, 220, 140, 0.4);
+  outline: none;
+}
+
+.dropdownEmpty {
+  padding: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13px;
 }
 
 .disabledRed {
   border-color: rgba(255, 92, 92, 0.95) !important;
   box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.22) inset;
+}
+
+.enabledGreen {
+  border-color: rgba(90, 220, 140, 0.95) !important;
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.20) inset;
+}
+
+/* Stop should remain neutral until hover, then show green affordance. */
+.stopGreenHover:hover,
+.stopGreenHover:focus-visible {
+  border-color: rgba(90, 220, 140, 0.95) !important;
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.22) inset;
 }
 
 .disabledRed:disabled {
@@ -65,9 +158,33 @@
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: 38px;
   font-weight: 650;
   letter-spacing: 0.2px;
+}
+
+.boardName {
+  height: 34px;
+  min-width: 220px;
+  max-width: 520px;
+  flex: 1 1 260px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(175, 210, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 560;
+}
+
+.boardNameCue {
+  border-color: rgba(236, 170, 78, 0.55);
+  box-shadow: 0 0 0 1px rgba(236, 170, 78, 0.18) inset;
+}
+
+.boardName:focus-visible {
+  outline: 2px solid rgba(120, 170, 255, 0.9);
+  outline-offset: 2px;
 }
 
 .headerRight {
@@ -144,9 +261,10 @@
 
 .columnTitle {
   margin: 0;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 750;
   letter-spacing: 0.3px;
+  color: rgba(236, 170, 78, 0.92);
 }
 
 .cards {
@@ -342,7 +460,12 @@
   }
 
   .title {
-    font-size: 20px;
+    font-size: 32px;
+  }
+
+  .boardName {
+    height: 32px;
+    font-size: 13px;
   }
 
   .column {
@@ -379,6 +502,12 @@
   color: rgba(255, 255, 255, 0.92);
   font-size: 12px;
   cursor: pointer;
+}
+
+/* Green hover affordance for actionable lane-level controls (Start/Add). */
+.secondaryButton:not(:disabled):hover {
+  border-color: rgba(90, 220, 140, 0.95);
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.18) inset;
 }
 
 .dangerButton {

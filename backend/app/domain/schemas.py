@@ -89,6 +89,26 @@ class SessionResponse(BaseModel):
         )
 
 
+class BoardResponse(BaseModel):
+    name: str
+    user_named: bool
+    is_new_unnamed: bool
+
+
+class BoardUpdateRequest(BaseModel):
+    name: str = Field(min_length=0)
+
+
+class SnapshotSummary(BaseModel):
+    id: int
+    name: str
+    saved_at: str
+
+
+class SnapshotLoadResponse(BaseModel):
+    ok: bool = True
+
+
 # Keyed by category name ("Design", "Build", ...). Value is the latest session
 # for that category, or null if no session has ever been recorded.
 SessionLatestByCategory = dict[str, SessionResponse | None]

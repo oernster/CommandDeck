@@ -15,6 +15,11 @@ from fastapi.testclient import TestClient
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
+# Also add repo root so tests can import top-level tooling modules like
+# `guiinstaller.py`.
+REPO_ROOT = BACKEND_DIR.parent
+sys.path.insert(0, str(REPO_ROOT))
+
 from app.core.database import get_db, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.core import config  # noqa: E402

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Category, Command, Status } from "../../api/commands";
 import {
@@ -20,6 +20,11 @@ import type { LatestSessionsByCategory, SessionActive } from "../../api/sessions
 
 import { CreateCommandModal } from "./CreateCommandModal";
 import { CommandDrawer } from "./CommandDrawer";
+
+import { getBoard, updateBoard } from "../../api/board";
+import type { BoardState } from "../../api/board";
+import { listSnapshots, loadSnapshot, saveSnapshot } from "../../api/snapshots";
+import type { SnapshotSummary } from "../../api/snapshots";
 
 import styles from "./Board.module.css";
 
@@ -56,6 +61,13 @@ export function Board() {
     Recover: null,
   });
   const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const [board, setBoard] = useState<BoardState | null>(null);
+  const [boardNameDraft, setBoardNameDraft] = useState<string>("");
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
 
   const [createFor, setCreateFor] = useState<Category | null>(null);
   const [selected, setSelected] = useState<Command | null>(null);
@@ -107,6 +119,10 @@ export function Board() {
     setError(null);
     setLoading(true);
     try {
+      const b = await getBoard();
+      setBoard(b);
+      setBoardNameDraft(b.name);
+
       const items = await listCommands();
       setCommands(items);
 
@@ -115,6 +131,9 @@ export function Board() {
 
       const latest = await getLatestSessionsByCategory();
       setLatestByCategory(latest);
+
+      const snaps = await listSnapshots();
+      setSnapshots(snaps);
     } catch (e) {
       const msg = isHttpError(e) ? e.message : "Failed to load commands";
       setError(msg);
@@ -126,6 +145,29 @@ export function Board() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!board?.is_new_unnamed) return;
+    // Autofocus only once per mount.
+    const t = window.setTimeout(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [board?.is_new_unnamed]);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent): void {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest(`.${styles.snapshotsMenu}`)) return;
+      setSnapshotsOpen(false);
+    }
+
+    if (!snapshotsOpen) return;
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [snapshotsOpen]);
 
   useEffect(() => {
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -300,6 +342,64 @@ export function Board() {
     }
   }
 
+  async function onSaveSnapshot(): Promise<void> {
+    setError(null);
+    try {
+      await saveSnapshot();
+      const snaps = await listSnapshots();
+      setSnapshots(snaps);
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not save snapshot";
+      setError(msg);
+    }
+  }
+
+  async function onLoadSnapshot(snapshotId: number): Promise<void> {
+    const ok = window.confirm(
+      "Load this snapshot? This will overwrite commands and sessions and clear outcomes/history."
+    );
+    if (!ok) return;
+
+    setError(null);
+    setSnapshotsOpen(false);
+    try {
+      await loadSnapshot(snapshotId);
+      await refresh();
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not load snapshot";
+      setError(msg);
+    }
+  }
+
+  async function onCommitBoardName(): Promise<void> {
+    if (boardNameDraft === (board?.name ?? "")) return;
+    setError(null);
+    try {
+      const next = await updateBoard({ name: boardNameDraft });
+      setBoard(next);
+      setBoardNameDraft(next.name);
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not update board name";
+      setError(msg);
+    }
+  }
+
+  function diskSvg() {
+    return (
+      <svg
+        className={styles.icon}
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          fill="currentColor"
+          d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4Zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6ZM6 7V5h10v2H6Z"
+        />
+      </svg>
+    );
+  }
+
   const activeCategory: Category | null =
     "active" in activeSession && activeSession.active === false
       ? null
@@ -352,7 +452,24 @@ export function Board() {
     <section className={styles.root}>
       <div className={styles.headerRow}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>Command Deck</h1>
+          <div className={styles.titleRow}>
+            <h1 className={styles.title}>Command Deck</h1>
+            <input
+              ref={nameInputRef}
+              className={`${styles.boardName} ${
+                board?.is_new_unnamed ? styles.boardNameCue : ""
+              }`}
+              value={boardNameDraft}
+              aria-label="Board name"
+              onChange={(e) => setBoardNameDraft(e.target.value)}
+              onBlur={() => void onCommitBoardName()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+          </div>
           <div className={styles.sessionRow}>
             <span className={styles.sessionBadge}>
               {activeCategory === null ? "No active session" : `Active: ${activeCategory}`}
@@ -362,13 +479,53 @@ export function Board() {
             ) : null}
             <button
               type="button"
-              className={`${styles.tinyButton} ${stopDisabled ? styles.disabledRed : ""}`}
+              className={`${styles.tinyButton} ${
+                stopDisabled ? styles.disabledRed : styles.stopGreenHover
+              }`}
               disabled={stopDisabled}
               title={stopDisabled ? "No active session to stop" : "Stop active session"}
               onClick={() => void onStopSession()}
             >
               Stop
             </button>
+
+            <button
+              type="button"
+              className={`${styles.globalButton} ${styles.greenHover}`}
+              title="Save snapshot"
+              onClick={() => void onSaveSnapshot()}
+            >
+              {diskSvg()}
+              <span>Save</span>
+            </button>
+
+            <div className={styles.snapshotsMenu}>
+              <button
+                type="button"
+                className={`${styles.globalButton} ${styles.greenHover}`}
+                onClick={() => setSnapshotsOpen((v) => !v)}
+              >
+                <span>Snapshots</span>
+              </button>
+              {snapshotsOpen ? (
+                <div className={styles.dropdown} role="menu" aria-label="Snapshots">
+                  {snapshots.length === 0 ? (
+                    <div className={styles.dropdownEmpty}>No snapshots yet</div>
+                  ) : (
+                    snapshots.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={styles.dropdownItem}
+                        onClick={() => void onLoadSnapshot(s.id)}
+                      >
+                        {s.name} - {formatLocal(s.saved_at) ?? s.saved_at}
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
         <div className={styles.headerRight}>

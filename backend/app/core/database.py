@@ -83,6 +83,66 @@ def _ensure_commands_sort_index(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _ensure_board_state(conn: sqlite3.Connection) -> None:
+    """Ensure the singleton `board_state` table exists and is initialized.
+
+    v1.1.0 introduces a board name field. The board remains "live" (no new-board
+    workflow), but we persist the user's chosen name.
+
+    Schema rules:
+    - Single row only (id=1)
+    - `name` can be NULL (treated as "Untitled board" in the UI)
+    - `user_named` indicates whether the user explicitly set a name
+    - `created_at` is used to infer first-run behavior for autofocus/cue
+    """
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS board_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          name TEXT,
+          user_named INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+        """.strip()
+    )
+
+    # Initialize singleton row if missing.
+    row = conn.execute("SELECT id FROM board_state WHERE id = 1").fetchone()
+    if row is None:
+        conn.execute(
+            "INSERT INTO board_state (id, name, user_named, created_at) VALUES (1, NULL, 0, strftime('%s','now'))"
+        )
+        conn.commit()
+
+
+def _ensure_snapshots(conn: sqlite3.Connection) -> None:
+    """Ensure the `snapshots` table exists (v1.1.0).
+
+    Snapshots store named serialized board state and a structural hash used for
+    dedupe.
+    """
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS snapshots (
+          id INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          saved_at INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          structural_hash TEXT NOT NULL
+        );
+        """.strip()
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_saved_at ON snapshots(saved_at DESC, id DESC);"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_snapshots_name_hash ON snapshots(name, structural_hash);"
+    )
+    conn.commit()
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     """Create the v1 schema if it doesn't exist.
 
@@ -135,6 +195,10 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_ended_at ON sessions(ended_at);"
     )
+
+    # v1.1.0 additions.
+    _ensure_board_state(conn)
+    _ensure_snapshots(conn)
 
     conn.commit()
 
