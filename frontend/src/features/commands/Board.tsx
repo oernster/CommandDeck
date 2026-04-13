@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Category, Command, Status } from "../../api/commands";
+import type { Command, StageId, Status } from "../../api/commands";
 import {
   deleteCommand,
   listCommands,
@@ -8,20 +8,20 @@ import {
   updateCommand,
 } from "../../api/commands";
 import { isHttpError } from "../../api/http";
-import { CATEGORIES, STATUSES } from "./constants";
+import { DEFAULT_STAGE_LABELS, STAGES, STATUSES } from "./constants";
 
 import {
   getActiveSession,
-  getLatestSessionsByCategory,
   startSession,
   stopSession,
+  getLatestSessionsByStageId,
 } from "../../api/sessions";
-import type { LatestSessionsByCategory, SessionActive } from "../../api/sessions";
+import type { LatestSessionsByStageId, SessionActive } from "../../api/sessions";
 
 import { CreateCommandModal } from "./CreateCommandModal";
 import { CommandDrawer } from "./CommandDrawer";
 
-import { getBoard, updateBoard } from "../../api/board";
+import { getBoard, updateBoard, updateStageLabels } from "../../api/board";
 import type { BoardState } from "../../api/board";
 import { listSnapshots, loadSnapshot, saveSnapshot } from "../../api/snapshots";
 import type { SnapshotSummary } from "../../api/snapshots";
@@ -48,35 +48,48 @@ export function Board() {
 
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<
-    | { category: Category; beforeId: number | null; afterId: number | null }
+    | { stage_id: StageId; beforeId: number | null; afterId: number | null }
     | null
   >(null);
 
   const [activeSession, setActiveSession] = useState<SessionActive>({ active: false });
-  const [latestByCategory, setLatestByCategory] = useState<LatestSessionsByCategory>({
-    Design: null,
-    Build: null,
-    Review: null,
-    Maintain: null,
-    Recover: null,
+  const [latestByStageId, setLatestByStageId] = useState<LatestSessionsByStageId>({
+    DESIGN: null,
+    BUILD: null,
+    REVIEW: null,
+    COMPLETE: null,
   });
   const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const [startMode, setStartMode] = useState(false);
 
   const [board, setBoard] = useState<BoardState | null>(null);
   const [boardNameDraft, setBoardNameDraft] = useState<string>("");
   const nameInputRef = useRef<HTMLInputElement | null>(null);
 
+  const [editingStageId, setEditingStageId] = useState<StageId | null>(null);
+  const [stageLabelDraft, setStageLabelDraft] = useState<string>("");
+
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
 
-  const [createFor, setCreateFor] = useState<Category | null>(null);
+  const [focusedStageId, setFocusedStageId] = useState<StageId>("DESIGN");
+  const [createFor, setCreateFor] = useState<StageId | null>(null);
   const [selected, setSelected] = useState<Command | null>(null);
 
-  const commandsByCategory = useMemo(() => {
-    const map = new Map<Category, Command[]>();
-    for (const c of CATEGORIES) map.set(c, []);
+  const stageLabels = useMemo((): Record<StageId, string> => {
+    const overrides = board?.stage_labels ?? null;
+    return {
+      ...DEFAULT_STAGE_LABELS,
+      ...(overrides ?? {}),
+    } as Record<StageId, string>;
+  }, [board?.stage_labels]);
+
+  const commandsByStageId = useMemo(() => {
+    const map = new Map<StageId, Command[]>();
+    for (const s of STAGES) map.set(s, []);
     for (const cmd of commands) {
-      map.get(cmd.category)?.push(cmd);
+      map.get(cmd.stage_id)?.push(cmd);
     }
     return map;
   }, [commands]);
@@ -97,22 +110,21 @@ export function Board() {
     return list.length;
   }
 
-  function buildReorderPayload(next: Command[]): Record<Category, number[]> {
-    const by: Record<Category, number[]> = {
-      Design: [],
-      Build: [],
-      Review: [],
-      Maintain: [],
-      Recover: [],
+  function buildReorderPayload(next: Command[]): Record<StageId, number[]> {
+    const by: Record<StageId, number[]> = {
+      DESIGN: [],
+      BUILD: [],
+      REVIEW: [],
+      COMPLETE: [],
     };
-    for (const c of next) by[c.category].push(c.id);
+    for (const c of next) by[c.stage_id].push(c.id);
     return by;
   }
 
   async function commitReorder(next: Command[]): Promise<void> {
-    // Persist ordering for all categories (simplest correctness; small dataset).
-    const by_category = buildReorderPayload(next);
-    await reorderCommands({ by_category });
+    // Persist ordering for all stages (simplest correctness; small dataset).
+    const by_stage_id = buildReorderPayload(next);
+    await reorderCommands({ by_stage_id });
   }
 
   async function refresh(): Promise<void> {
@@ -129,8 +141,8 @@ export function Board() {
       const s = await getActiveSession();
       setActiveSession(s);
 
-      const latest = await getLatestSessionsByCategory();
-      setLatestByCategory(latest);
+      const latest = await getLatestSessionsByStageId();
+      setLatestByStageId(latest);
 
       const snaps = await listSnapshots();
       setSnapshots(snaps);
@@ -174,8 +186,19 @@ export function Board() {
     return () => window.clearInterval(t);
   }, []);
 
-  function openCreate(category: Category): void {
-    setCreateFor(category);
+  useEffect(() => {
+    if (!startMode) return;
+
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape") setStartMode(false);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [startMode]);
+
+  function openCreate(stage_id: StageId): void {
+    setCreateFor(stage_id);
   }
 
   async function onChangeStatus(id: number, status: Status): Promise<void> {
@@ -237,7 +260,7 @@ export function Board() {
 
   function onCardDragOver(
     e: React.DragEvent,
-    category: Category,
+    stage_id: StageId,
     cmd: Command
   ): void {
     if (draggingId === null) return;
@@ -253,13 +276,13 @@ export function Board() {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const before = e.clientY < rect.top + rect.height / 2;
     setDropTarget({
-      category,
+      stage_id,
       beforeId: before ? cmd.id : null,
       afterId: before ? null : cmd.id,
     });
   }
 
-  function onColumnDragOver(e: React.DragEvent, category: Category): void {
+  function onColumnDragOver(e: React.DragEvent, stage_id: StageId): void {
     if (draggingId === null) return;
     // Only handle "background" drag-over events; card-level handlers set
     // precise insertion targets.
@@ -269,7 +292,7 @@ export function Board() {
     e.dataTransfer.dropEffect = "move";
 
     // If we're over the column but not a specific card, append to bottom.
-    setDropTarget({ category, beforeId: null, afterId: null });
+    setDropTarget({ stage_id, beforeId: null, afterId: null });
   }
 
   async function onDrop(e: React.DragEvent): Promise<void> {
@@ -281,27 +304,27 @@ export function Board() {
 
     const prev = commands;
     const without = prev.filter((c) => c.id !== draggingId);
-    const targetList = without.filter((c) => c.category === dropTarget.category);
+    const targetList = without.filter((c) => c.stage_id === dropTarget.stage_id);
     const insertIndex = computeInsertIndex(
       targetList,
       dropTarget.beforeId,
       dropTarget.afterId
     );
 
-    const moved: Command = { ...moving, category: dropTarget.category };
+    const moved: Command = { ...moving, stage_id: dropTarget.stage_id };
     const nextTarget = [
       ...targetList.slice(0, insertIndex),
       moved,
       ...targetList.slice(insertIndex),
     ];
 
-    // Rebuild full list preserving other categories.
+    // Rebuild full list preserving other stages.
     const next: Command[] = [];
-    for (const cat of CATEGORIES) {
-      if (cat === dropTarget.category) {
+    for (const s of STAGES) {
+      if (s === dropTarget.stage_id) {
         next.push(...nextTarget);
       } else {
-        next.push(...without.filter((c) => c.category === cat));
+        next.push(...without.filter((c) => c.stage_id === s));
       }
     }
 
@@ -320,10 +343,10 @@ export function Board() {
     }
   }
 
-  async function onStartSession(category: Category): Promise<void> {
+  async function onStartSession(command_id: number): Promise<void> {
     setError(null);
     try {
-      await startSession(category);
+      await startSession(command_id);
       await refresh();
     } catch (e) {
       const msg = isHttpError(e) ? e.message : "Session could not be started";
@@ -400,12 +423,25 @@ export function Board() {
     );
   }
 
-  const activeCategory: Category | null =
+  const activeStageId: StageId | null =
     "active" in activeSession && activeSession.active === false
       ? null
-      : (activeSession as Exclude<SessionActive, { active: false }>).category;
+      : (activeSession as Exclude<SessionActive, { active: false }>).stage_id;
 
-  const stopDisabled = activeCategory === null;
+  const activeCommandId: number | null =
+    "active" in activeSession && activeSession.active === false
+      ? null
+      : (activeSession as Exclude<SessionActive, { active: false }>).command_id;
+
+  const effectiveFocusedStageId: StageId = activeStageId ?? focusedStageId;
+
+  const activeCommand: Command | null = useMemo(() => {
+    if (activeCommandId === null) return null;
+    return commands.find((c) => c.id === activeCommandId) ?? null;
+  }, [activeCommandId, commands]);
+
+  const stopDisabled = activeStageId === null;
+  const startDisabled = activeStageId !== null;
 
   function formatDuration(seconds: number): string {
     const s = Math.max(0, Math.floor(seconds));
@@ -422,12 +458,49 @@ export function Board() {
   }
 
   const sessionTimerText = useMemo(() => {
-    if (activeCategory === null) return null;
+    if (activeStageId === null) return null;
     const startIso = (activeSession as Exclude<SessionActive, { active: false }>).started_at;
     const startMs = Date.parse(startIso);
     if (Number.isNaN(startMs)) return null;
     return formatDuration((nowMs - startMs) / 1000);
-  }, [activeSession, activeCategory, nowMs]);
+  }, [activeSession, activeStageId, nowMs]);
+
+  function startSessionLabel(): string {
+    if (startDisabled) return "Start";
+    return startMode ? "Cancel" : "Start";
+  }
+
+  async function onToggleStartMode(): Promise<void> {
+    if (startDisabled) return;
+    if (startMode) {
+      setStartMode(false);
+      return;
+    }
+    if (commands.length === 0) {
+      setError("Create a task first, then Start.");
+      return;
+    }
+    setStartMode(true);
+  }
+
+  async function onCommitStageLabel(stage_id: StageId, nextLabel: string): Promise<void> {
+    const cleaned = nextLabel.trim();
+    if (!cleaned) return;
+
+    setError(null);
+    try {
+      const next = await updateStageLabels({
+        stage_labels: {
+          ...(board?.stage_labels ?? {}),
+          [stage_id]: cleaned,
+        },
+      });
+      setBoard(next);
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not update stage label";
+      setError(msg);
+    }
+  }
 
   function formatLocal(iso: string): string | null {
     const ms = Date.parse(iso);
@@ -472,11 +545,41 @@ export function Board() {
           </div>
           <div className={styles.sessionRow}>
             <span className={styles.sessionBadge}>
-              {activeCategory === null ? "No active session" : `Active: ${activeCategory}`}
+              {activeStageId === null
+                ? "No active session"
+                : `Active: ${stageLabels[activeStageId]}${
+                    activeCommand ? ` · ${activeCommand.title}` : ""
+                  }`}
             </span>
-            {activeCategory !== null && sessionTimerText ? (
+            {activeStageId !== null && sessionTimerText ? (
               <span className={styles.sessionTimer}>{sessionTimerText}</span>
             ) : null}
+
+            <button
+              type="button"
+              className={`${styles.tinyButton} ${
+                startDisabled ? styles.disabledRed : styles.greenHover
+              }`}
+              disabled={startDisabled}
+              title={startDisabled ? "Stop the current session before starting another" : "Start a session by selecting a task"}
+              onClick={() => void onToggleStartMode()}
+            >
+              {startSessionLabel()}
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.tinyButton} ${styles.stopGreenHover}`}
+              title={
+                activeStageId === null
+                  ? "Add a task"
+                  : `Add a task in ${stageLabels[effectiveFocusedStageId]}`
+              }
+              onClick={() => openCreate(effectiveFocusedStageId)}
+            >
+              Add
+            </button>
+
             <button
               type="button"
               className={`${styles.tinyButton} ${
@@ -527,6 +630,18 @@ export function Board() {
               ) : null}
             </div>
           </div>
+
+          <div className={styles.helperRow}>
+            {startMode ? (
+              <span className={styles.helperText}>
+                Select a task card to start a session. Press Esc to cancel.
+              </span>
+            ) : (
+              <span className={styles.helperText}>
+                Tip: drag the grip on a card to reorder or move it between stages.
+              </span>
+            )}
+          </div>
         </div>
         <div className={styles.headerRight}>
           {loading ? <span className={styles.muted}>Loading…</span> : null}
@@ -534,60 +649,80 @@ export function Board() {
         </div>
       </div>
 
-      <div className={styles.board}>
-        {CATEGORIES.map((category) => (
+      <div
+        className={`${styles.board} ${activeStageId ? styles.boardHasActive : ""} ${
+          startMode ? styles.boardStartMode : ""
+        }`}
+      >
+        {STAGES.map((stage_id) => (
           <div
-            key={category}
+            key={stage_id}
             className={`${styles.column} ${
-              activeCategory === category ? styles.columnActive : ""
+              activeStageId === stage_id ? styles.columnActive : ""
+            } ${
+              dropTarget?.stage_id === stage_id && draggingId !== null
+                ? styles.columnDropTarget
+                : ""
+            } ${
+              effectiveFocusedStageId === stage_id ? styles.columnFocused : ""
             }`}
+            onMouseDown={() => setFocusedStageId(stage_id)}
           >
             <div className={styles.columnHeader}>
-              <h2 className={styles.columnTitle}>{category}</h2>
-              <div className={styles.columnHeaderActions}>
-                {(() => {
-                  const startDisabled = activeCategory === category;
-                  const startTitle = startDisabled
-                    ? "This category already has an active timer"
-                    : "Start a session timer for this category";
+              {editingStageId === stage_id ? (
+                <input
+                  className={styles.stageLabelInput}
+                  value={stageLabelDraft}
+                  aria-label="Stage label"
+                  onChange={(e) => setStageLabelDraft(e.target.value)}
+                  onBlur={() => {
+                    setEditingStageId(null);
+                    void onCommitStageLabel(stage_id, stageLabelDraft);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                    if (e.key === "Escape") {
+                      setEditingStageId(null);
+                      setStageLabelDraft(stageLabels[stage_id]);
+                    }
+                  }}
+                  autoFocus
+                />
+              ) : (
+                <h2 className={styles.columnTitle}>{stageLabels[stage_id]}</h2>
+              )}
 
-                  return (
-                    <button
-                      type="button"
-                      className={`${styles.secondaryButton} ${
-                        startDisabled ? styles.disabledRed : ""
-                      }`}
-                      disabled={startDisabled}
-                      title={startTitle}
-                      onClick={() => void onStartSession(category)}
-                    >
-                      Start
-                    </button>
-                  );
-                })()}
+              <div className={styles.columnHeaderActions}>
                 <button
                   type="button"
                   className={styles.secondaryButton}
-                  onClick={() => openCreate(category)}
+                  title="Rename stage"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingStageId(stage_id);
+                    setStageLabelDraft(stageLabels[stage_id]);
+                  }}
                 >
-                  Add
+                  Rename
                 </button>
               </div>
             </div>
 
-            {latestByCategory[category] ? (
+            {latestByStageId[stage_id] ? (
               <div className={styles.paneSessionMeta}>
-                {latestByCategory[category]?.started_at ? (
+                {latestByStageId[stage_id]?.started_at ? (
                   <span>
-                    Started: {formatLocal(latestByCategory[category]!.started_at)}
+                    Started: {formatLocal(latestByStageId[stage_id]!.started_at)}
                   </span>
                 ) : null}
 
-                {latestByCategory[category]?.ended_at ? (
+                {latestByStageId[stage_id]?.ended_at ? (
                   <span>
-                    Ended: {formatLocal(latestByCategory[category]!.ended_at!)}
+                    Ended: {formatLocal(latestByStageId[stage_id]!.ended_at!)}
                   </span>
-                ) : activeCategory === category && sessionTimerText ? (
+                ) : activeStageId === stage_id && sessionTimerText ? (
                   <span>Elapsed: {sessionTimerText}</span>
                 ) : null}
               </div>
@@ -595,29 +730,38 @@ export function Board() {
 
             <div
               className={styles.cards}
-              onDragOver={(e) => onColumnDragOver(e, category)}
+              onDragOver={(e) => onColumnDragOver(e, stage_id)}
               onDrop={(e) => void onDrop(e)}
             >
-              {(commandsByCategory.get(category) ?? []).length === 0 ? (
-                <div className={styles.empty}>No commands yet</div>
+              {(commandsByStageId.get(stage_id) ?? []).length === 0 ? (
+                <div className={styles.empty}>No tasks yet</div>
               ) : null}
 
-              {(commandsByCategory.get(category) ?? []).map((cmd) => (
+              {(commandsByStageId.get(stage_id) ?? []).map((cmd) => (
                 <div
                   key={cmd.id}
                   className={`${styles.card} ${
                     draggingId === cmd.id ? styles.cardDragging : ""
                   } ${
-                    dropTarget?.category === category && dropTarget.beforeId === cmd.id
+                    activeCommandId === cmd.id ? styles.cardActiveTask : ""
+                  } ${
+                    dropTarget?.stage_id === stage_id && dropTarget.beforeId === cmd.id
                       ? styles.cardDropBefore
                       : ""
                   } ${
-                    dropTarget?.category === category && dropTarget.afterId === cmd.id
+                    dropTarget?.stage_id === stage_id && dropTarget.afterId === cmd.id
                       ? styles.cardDropAfter
                       : ""
                   }`}
-                  onClick={() => setSelected(cmd)}
-                  onDragOver={(e) => onCardDragOver(e, category, cmd)}
+                  onClick={() => {
+                    if (startMode && !startDisabled) {
+                      setStartMode(false);
+                      void onStartSession(cmd.id);
+                      return;
+                    }
+                    setSelected(cmd);
+                  }}
+                  onDragOver={(e) => onCardDragOver(e, stage_id, cmd)}
                   onDrop={(e) => {
                     e.stopPropagation();
                     void onDrop(e);
@@ -684,7 +828,8 @@ export function Board() {
 
       {createFor ? (
         <CreateCommandModal
-          initialCategory={createFor}
+          initialStageId={createFor}
+          stageLabels={stageLabels}
           onClose={() => setCreateFor(null)}
           onCreated={refresh}
           setError={(msg) => setError(msg || null)}
@@ -694,6 +839,7 @@ export function Board() {
       {selected ? (
         <CommandDrawer
           command={selected}
+          stageLabels={stageLabels}
           onClose={() => setSelected(null)}
           onRefreshCommands={refresh}
           setError={(msg) => setError(msg || null)}

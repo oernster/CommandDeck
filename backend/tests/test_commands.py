@@ -4,13 +4,13 @@ from __future__ import annotations
 def test_create_and_list_commands(client) -> None:
     create = client.post(
         "/api/commands",
-        json={"title": "Draft architecture", "category": "Design"},
+        json={"title": "Draft architecture", "stage_id": "DESIGN"},
     )
     assert create.status_code == 201
     body = create.json()
     assert body["id"] == 1
     assert body["title"] == "Draft architecture"
-    assert body["category"] == "Design"
+    assert body["stage_id"] == "DESIGN"
     assert body["status"] == "Not Started"
     assert body["created_at"].endswith("Z")
 
@@ -30,11 +30,11 @@ def test_get_command_404(client) -> None:
 def test_update_command_and_filtering(client) -> None:
     c1 = client.post(
         "/api/commands",
-        json={"title": "Cmd1", "category": "Design", "status": "Not Started"},
+        json={"title": "Cmd1", "stage_id": "DESIGN", "status": "Not Started"},
     ).json()
     c2 = client.post(
         "/api/commands",
-        json={"title": "Cmd2", "category": "Build", "status": "Blocked"},
+        json={"title": "Cmd2", "stage_id": "BUILD", "status": "Blocked"},
     ).json()
 
     upd = client.patch(
@@ -44,7 +44,7 @@ def test_update_command_and_filtering(client) -> None:
     assert upd.status_code == 200
     assert upd.json()["status"] == "In Progress"
 
-    only_design = client.get("/api/commands?category=Design")
+    only_design = client.get("/api/commands?stage_id=DESIGN")
     assert only_design.status_code == 200
     assert [c["id"] for c in only_design.json()] == [c1["id"]]
 
@@ -52,29 +52,29 @@ def test_update_command_and_filtering(client) -> None:
     assert only_blocked.status_code == 200
     assert [c["id"] for c in only_blocked.json()] == [c2["id"]]
 
-    both = client.get("/api/commands?category=Build&status=Blocked")
+    both = client.get("/api/commands?stage_id=BUILD&status=Blocked")
     assert both.status_code == 200
     assert [c["id"] for c in both.json()] == [c2["id"]]
 
 
-def test_update_category_valid_value_exercises_branch(client) -> None:
+def test_update_stage_id_valid_value_exercises_branch(client) -> None:
     created = client.post(
         "/api/commands",
-        json={"title": "Move", "category": "Design"},
+        json={"title": "Move", "stage_id": "DESIGN"},
     ).json()
 
     upd = client.patch(
         f"/api/commands/{created['id']}",
-        json={"category": "Build"},
+        json={"stage_id": "BUILD"},
     )
     assert upd.status_code == 200
-    assert upd.json()["category"] == "Build"
+    assert upd.json()["stage_id"] == "BUILD"
 
 
 def test_delete_command(client) -> None:
     created = client.post(
         "/api/commands",
-        json={"title": "Delete me", "category": "Recover"},
+        json={"title": "Delete me", "stage_id": "COMPLETE"},
     ).json()
 
     deleted = client.delete(f"/api/commands/{created['id']}")
@@ -88,28 +88,28 @@ def test_delete_command(client) -> None:
 def test_validation_errors_are_400_with_simple_shape(client) -> None:
     bad_category = client.post(
         "/api/commands",
-        json={"title": "X", "category": "Nope"},
+        json={"title": "X", "stage_id": "Nope"},
     )
     assert bad_category.status_code == 400
-    assert bad_category.json() == {"error": "Invalid category"}
+    assert bad_category.json() == {"error": "Invalid stage_id"}
 
     bad_status = client.post(
         "/api/commands",
-        json={"title": "X", "category": "Design", "status": "Nope"},
+        json={"title": "X", "stage_id": "DESIGN", "status": "Nope"},
     )
     assert bad_status.status_code == 400
     assert bad_status.json() == {"error": "Invalid status"}
 
     empty_title = client.post(
         "/api/commands",
-        json={"title": "   ", "category": "Design"},
+        json={"title": "   ", "stage_id": "DESIGN"},
     )
     assert empty_title.status_code == 400
     assert empty_title.json() == {"error": "Title must not be empty"}
 
-    invalid_query = client.get("/api/commands?category=Nope")
+    invalid_query = client.get("/api/commands?stage_id=Nope")
     assert invalid_query.status_code == 400
-    assert invalid_query.json() == {"error": "Invalid category"}
+    assert invalid_query.json() == {"error": "Invalid stage_id"}
 
     invalid_status_query = client.get("/api/commands?status=Nope")
     assert invalid_status_query.status_code == 400
@@ -117,15 +117,15 @@ def test_validation_errors_are_400_with_simple_shape(client) -> None:
 
     created = client.post(
         "/api/commands",
-        json={"title": "Cmd", "category": "Design"},
+        json={"title": "Cmd", "stage_id": "DESIGN"},
     ).json()
 
-    bad_update_category = client.patch(
+    bad_update_stage_id = client.patch(
         f"/api/commands/{created['id']}",
-        json={"category": "Nope"},
+        json={"stage_id": "Nope"},
     )
-    assert bad_update_category.status_code == 400
-    assert bad_update_category.json() == {"error": "Invalid category"}
+    assert bad_update_stage_id.status_code == 400
+    assert bad_update_stage_id.json() == {"error": "Invalid stage_id"}
 
     bad_update_status = client.patch(
         f"/api/commands/{created['id']}",
@@ -157,7 +157,7 @@ def test_delete_command_404(client) -> None:
 def test_get_command_success(client) -> None:
     created = client.post(
         "/api/commands",
-        json={"title": "Get me", "category": "Maintain"},
+        json={"title": "Get me", "stage_id": "COMPLETE"},
     ).json()
 
     fetched = client.get(f"/api/commands/{created['id']}")
@@ -166,30 +166,30 @@ def test_get_command_success(client) -> None:
 
 
 def test_fastapi_request_validation_errors_are_mapped_to_400(client) -> None:
-    # Missing required field `category` should trigger FastAPI validation.
+    # Missing required field `stage_id` should trigger FastAPI validation.
     resp = client.post("/api/commands", json={"title": "X"})
     assert resp.status_code == 400
     assert resp.json() == {"error": "Invalid request"}
 
 
-def test_reorder_commands_persists_ordering_within_and_across_categories(
+def test_reorder_commands_persists_ordering_within_and_across_stages(
     client,
 ) -> None:
-    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
-    d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
-    b1 = client.post("/api/commands", json={"title": "B1", "category": "Build"}).json()
+    d1 = client.post("/api/commands", json={"title": "D1", "stage_id": "DESIGN"}).json()
+    d2 = client.post("/api/commands", json={"title": "D2", "stage_id": "DESIGN"}).json()
+    b1 = client.post("/api/commands", json={"title": "B1", "stage_id": "BUILD"}).json()
 
     # Initial order: append-to-bottom; list endpoint should return in that order.
-    items = client.get("/api/commands?category=Design").json()
+    items = client.get("/api/commands?stage_id=DESIGN").json()
     assert [c["id"] for c in items] == [d1["id"], d2["id"]]
 
-    # Move d2 above d1 (within category) and move b1 into Design at the end.
+    # Move d2 above d1 (within stage) and move b1 into DESIGN at the end.
     reorder = client.post(
         "/api/commands/reorder",
         json={
-            "by_category": {
-                "Design": [d2["id"], d1["id"], b1["id"]],
-                "Build": [],
+            "by_stage_id": {
+                "DESIGN": [d2["id"], d1["id"], b1["id"]],
+                "BUILD": [],
             }
         },
     )
@@ -197,62 +197,62 @@ def test_reorder_commands_persists_ordering_within_and_across_categories(
     assert reorder.json() == {"ok": True}
 
     # Persisted order should be reflected on list.
-    items2 = client.get("/api/commands?category=Design").json()
+    items2 = client.get("/api/commands?stage_id=DESIGN").json()
     assert [c["id"] for c in items2] == [d2["id"], d1["id"], b1["id"]]
-    items3 = client.get("/api/commands?category=Build").json()
+    items3 = client.get("/api/commands?stage_id=BUILD").json()
     assert items3 == []
 
 
-def test_reorder_commands_invalid_category_is_400(client) -> None:
-    resp = client.post("/api/commands/reorder", json={"by_category": {"Nope": []}})
+def test_reorder_commands_invalid_stage_id_is_400(client) -> None:
+    resp = client.post("/api/commands/reorder", json={"by_stage_id": {"Nope": []}})
     assert resp.status_code == 400
-    assert resp.json() == {"error": "Invalid category"}
+    assert resp.json() == {"error": "Invalid stage_id"}
 
 
 def test_reorder_commands_requires_full_coverage(client) -> None:
-    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
-    client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
+    d1 = client.post("/api/commands", json={"title": "D1", "stage_id": "DESIGN"}).json()
+    client.post("/api/commands", json={"title": "D2", "stage_id": "DESIGN"}).json()
 
     # Missing one id should fail.
     resp = client.post(
         "/api/commands/reorder",
-        json={"by_category": {"Design": [d1["id"]]}},
+        json={"by_stage_id": {"DESIGN": [d1["id"]]}},
     )
     assert resp.status_code == 400
 
 
 def test_reorder_commands_duplicate_ids_is_400(client) -> None:
-    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
+    d1 = client.post("/api/commands", json={"title": "D1", "stage_id": "DESIGN"}).json()
     resp = client.post(
         "/api/commands/reorder",
-        json={"by_category": {"Design": [d1["id"], d1["id"]]}},
+        json={"by_stage_id": {"DESIGN": [d1["id"], d1["id"]]}},
     )
     assert resp.status_code == 400
 
 
 def test_reorder_commands_empty_payload_is_ok(client) -> None:
-    resp = client.post("/api/commands/reorder", json={"by_category": {}})
+    resp = client.post("/api/commands/reorder", json={"by_stage_id": {}})
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
 
 
-def test_list_commands_is_ordered_within_category(client) -> None:
-    # Build will come before Design due to category ordering in SQL, but we
-    # mainly assert the within-category order is stable and respects sort_index.
-    d1 = client.post("/api/commands", json={"title": "D1", "category": "Design"}).json()
-    d2 = client.post("/api/commands", json={"title": "D2", "category": "Design"}).json()
-    b1 = client.post("/api/commands", json={"title": "B1", "category": "Build"}).json()
+def test_list_commands_is_ordered_within_stage(client) -> None:
+    # BUILD will come before DESIGN due to stage_id ordering in SQL, but we mainly
+    # assert the within-stage order is stable and respects sort_index.
+    d1 = client.post("/api/commands", json={"title": "D1", "stage_id": "DESIGN"}).json()
+    d2 = client.post("/api/commands", json={"title": "D2", "stage_id": "DESIGN"}).json()
+    b1 = client.post("/api/commands", json={"title": "B1", "stage_id": "BUILD"}).json()
 
     # Reorder within Design.
     ok = client.post(
         "/api/commands/reorder",
-        json={"by_category": {"Design": [d2["id"], d1["id"]]}},
+        json={"by_stage_id": {"DESIGN": [d2["id"], d1["id"]]}},
     )
     assert ok.status_code == 200
 
     items = client.get("/api/commands").json()
-    design = [c for c in items if c["category"] == "Design"]
+    design = [c for c in items if c["stage_id"] == "DESIGN"]
     assert [c["id"] for c in design] == [d2["id"], d1["id"]]
 
-    build = [c for c in items if c["category"] == "Build"]
+    build = [c for c in items if c["stage_id"] == "BUILD"]
     assert [c["id"] for c in build] == [b1["id"]]

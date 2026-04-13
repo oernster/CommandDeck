@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from app.domain.enums import Category, Status
+from app.domain.enums import StageId, Status
 
 
 def utc_now_epoch_seconds() -> int:
@@ -22,7 +22,7 @@ def epoch_seconds_to_iso8601_z(epoch_seconds: int) -> str:
 class Command:
     id: int
     title: str
-    category: Category
+    stage_id: StageId
     status: Status
     created_at: int  # UTC epoch seconds
 
@@ -38,6 +38,7 @@ class Outcome:
 @dataclass(frozen=True, slots=True)
 class Session:
     id: int
-    category: Category
+    command_id: int
+    stage_id: StageId
     started_at: int  # UTC epoch seconds
     ended_at: int | None  # UTC epoch seconds

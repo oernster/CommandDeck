@@ -10,7 +10,7 @@ def test_outcomes_list_requires_command(client) -> None:
 def test_create_and_list_outcomes(client) -> None:
     cmd = client.post(
         "/api/commands",
-        json={"title": "With outcomes", "category": "Design"},
+        json={"title": "With outcomes", "stage_id": "DESIGN"},
     ).json()
 
     created = client.post(
@@ -34,7 +34,7 @@ def test_create_and_list_outcomes(client) -> None:
 def test_create_outcome_validation(client) -> None:
     cmd = client.post(
         "/api/commands",
-        json={"title": "X", "category": "Build"},
+        json={"title": "X", "stage_id": "BUILD"},
     ).json()
 
     empty_note = client.post(
@@ -55,7 +55,7 @@ def test_create_outcome_validation(client) -> None:
 def test_delete_outcome(client) -> None:
     cmd = client.post(
         "/api/commands",
-        json={"title": "X", "category": "Review"},
+        json={"title": "X", "stage_id": "REVIEW"},
     ).json()
     out = client.post(
         f"/api/commands/{cmd['id']}/outcomes",
@@ -74,7 +74,7 @@ def test_delete_outcome(client) -> None:
 def test_command_delete_cascades_outcomes(client) -> None:
     cmd = client.post(
         "/api/commands",
-        json={"title": "Cascade", "category": "Recover"},
+        json={"title": "Cascade", "stage_id": "COMPLETE"},
     ).json()
     out = client.post(
         f"/api/commands/{cmd['id']}/outcomes",

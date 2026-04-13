@@ -2,7 +2,7 @@
 
 The domain package defines:
 
-- enums (Category, Status)
+- enums (StageId, Status)
 - immutable models (Command, Outcome, Session)
 - domain-level errors used across API/services
 

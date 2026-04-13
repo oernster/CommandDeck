@@ -5,13 +5,14 @@ import sqlite3
 from fastapi import APIRouter, Depends
 
 from app.core.database import get_db
-from app.domain.enums import Category
+from app.domain.enums import StageId
 from app.domain.errors import ValidationError
 from app.domain.schemas import (
-    SessionLatestByCategory,
+    SessionLatestByStageId,
     SessionResponse,
     SessionStartRequest,
 )
+from app.repositories.command_repository import CommandRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.session_service import SessionService
 
@@ -24,18 +25,18 @@ def _service(conn: sqlite3.Connection) -> SessionService:
 
 @router.get("/api/sessions", response_model=list[SessionResponse])
 def list_sessions(
-    category: str | None = None,
+    stage_id: str | None = None,
     active: bool | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> list[SessionResponse]:
-    parsed_category = None
-    if category is not None:
-        parsed_category = Category.from_str(category)
-        if parsed_category is None:
-            raise ValidationError("Invalid category")
+    parsed_stage_id = None
+    if stage_id is not None:
+        parsed_stage_id = StageId.from_str(stage_id)
+        if parsed_stage_id is None:
+            raise ValidationError("Invalid stage_id")
 
     service = _service(conn)
-    sessions = service.list(category=parsed_category, active=active)
+    sessions = service.list(stage_id=parsed_stage_id, active=active)
     return [SessionResponse.from_model(s) for s in sessions]
 
 
@@ -50,21 +51,21 @@ def get_active_session(
     return SessionResponse.from_model(session)
 
 
-@router.get("/api/sessions/latest-by-category", response_model=SessionLatestByCategory)
-def latest_by_category(
+@router.get("/api/sessions/latest-by-stage-id", response_model=SessionLatestByStageId)
+def latest_by_stage_id(
     conn: sqlite3.Connection = Depends(get_db),
-) -> SessionLatestByCategory:
-    """Return the latest session (active or ended) for every category.
+) -> SessionLatestByStageId:
+    """Return the latest session (active or ended) for every stage.
 
     Categories with no sessions are returned with a null value.
     """
     service = _service(conn)
-    latest = service.latest_by_category()
+    latest = service.latest_by_stage_id()
 
-    out: SessionLatestByCategory = {}
-    for c in Category:
-        session = latest.get(c)
-        out[c.value] = SessionResponse.from_model(session) if session else None
+    out: SessionLatestByStageId = {}
+    for s in StageId:
+        session = latest.get(s)
+        out[s.value] = SessionResponse.from_model(session) if session else None
     return out
 
 
@@ -73,12 +74,14 @@ def start_session(
     payload: SessionStartRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> SessionResponse:
-    parsed = Category.from_str(payload.category)
-    if parsed is None:
-        raise ValidationError("Invalid category")
+    # Start requires task selection: validate command exists and derive its stage.
+    cmd_repo = CommandRepository(conn)
+    cmd = cmd_repo.get(int(payload.command_id))
+    if cmd is None:
+        raise ValidationError("Invalid command_id")
 
     service = _service(conn)
-    session = service.start(category=parsed)
+    session = service.start(command_id=cmd.id, stage_id=cmd.stage_id)
     return SessionResponse.from_model(session)
 
 

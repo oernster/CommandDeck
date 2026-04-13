@@ -1,24 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Category, Status } from "../../api/commands";
+import type { StageId, Status } from "../../api/commands";
 import { createCommand } from "../../api/commands";
 import { isHttpError } from "../../api/http";
-import { STATUSES } from "./constants";
+import { DEFAULT_STAGE_LABELS, STAGES, STATUSES } from "./constants";
 
 import styles from "./CreateCommandModal.module.css";
 
 export type CreateCommandModalProps = {
-  initialCategory: Category;
+  initialStageId: StageId;
+  stageLabels: Record<StageId, string>;
   onClose: () => void;
   onCreated: () => Promise<void>;
   setError: (msg: string) => void;
 };
 
 export function CreateCommandModal(props: CreateCommandModalProps) {
-  const { initialCategory, onClose, onCreated, setError } = props;
+  const { initialStageId, stageLabels, onClose, onCreated, setError } = props;
 
   const [title, setTitle] = useState("");
-  const [category] = useState<Category>(initialCategory);
+  const [stage_id, setStageId] = useState<StageId>(initialStageId);
   const [status, setStatus] = useState<Status>("Not Started");
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
@@ -36,7 +37,7 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
     setError("");
     setSaving(true);
     try {
-      await createCommand({ title: title.trim(), category, status });
+      await createCommand({ title: title.trim(), stage_id, status });
       await onCreated();
       onClose();
     } catch (err) {
@@ -84,6 +85,21 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
               placeholder="What needs doing?"
               maxLength={200}
               />
+          </div>
+
+          <div className={styles.row}>
+            <span className={styles.label}>Stage</span>
+            <select
+              className={styles.select}
+              value={stage_id}
+              onChange={(e) => setStageId(e.target.value as StageId)}
+            >
+              {STAGES.map((s) => (
+                <option key={s} value={s}>
+                  {stageLabels[s] ?? DEFAULT_STAGE_LABELS[s]}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className={styles.row}>

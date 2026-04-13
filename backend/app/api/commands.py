@@ -5,7 +5,7 @@ import sqlite3
 from fastapi import APIRouter, Depends
 
 from app.core.database import get_db
-from app.domain.enums import Category, Status
+from app.domain.enums import StageId, Status
 from app.domain.errors import NotFoundError, ValidationError
 from app.domain.schemas import (
     CommandCreateRequest,
@@ -25,15 +25,15 @@ def _service(conn: sqlite3.Connection) -> CommandService:
 
 @router.get("/api/commands", response_model=list[CommandResponse])
 def list_commands(
-    category: str | None = None,
+    stage_id: str | None = None,
     status: str | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> list[CommandResponse]:
-    parsed_category = None
-    if category is not None:
-        parsed_category = Category.from_str(category)
-        if parsed_category is None:
-            raise ValidationError("Invalid category")
+    parsed_stage_id = None
+    if stage_id is not None:
+        parsed_stage_id = StageId.from_str(stage_id)
+        if parsed_stage_id is None:
+            raise ValidationError("Invalid stage_id")
 
     parsed_status = None
     if status is not None:
@@ -44,7 +44,7 @@ def list_commands(
     service = _service(conn)
     return [
         CommandResponse.from_model(c)
-        for c in service.list(parsed_category, parsed_status)
+        for c in service.list(parsed_stage_id, parsed_status)
     ]
 
 
@@ -53,9 +53,9 @@ def create_command(
     payload: CommandCreateRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> CommandResponse:
-    parsed_category = Category.from_str(payload.category)
-    if parsed_category is None:
-        raise ValidationError("Invalid category")
+    parsed_stage_id = StageId.from_str(payload.stage_id)
+    if parsed_stage_id is None:
+        raise ValidationError("Invalid stage_id")
 
     parsed_status = Status.NOT_STARTED
     if payload.status is not None:
@@ -67,7 +67,7 @@ def create_command(
     service = _service(conn)
     cmd = service.create(
         title=payload.title,
-        category=parsed_category,
+        stage_id=parsed_stage_id,
         status=parsed_status,
     )
     return CommandResponse.from_model(cmd)
@@ -91,11 +91,11 @@ def update_command(
     payload: CommandUpdateRequest,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> CommandResponse:
-    parsed_category = None
-    if payload.category is not None:
-        parsed_category = Category.from_str(payload.category)
-        if parsed_category is None:
-            raise ValidationError("Invalid category")
+    parsed_stage_id = None
+    if payload.stage_id is not None:
+        parsed_stage_id = StageId.from_str(payload.stage_id)
+        if parsed_stage_id is None:
+            raise ValidationError("Invalid stage_id")
 
     parsed_status = None
     if payload.status is not None:
@@ -107,7 +107,7 @@ def update_command(
     cmd = service.update(
         command_id,
         title=payload.title,
-        category=parsed_category,
+        stage_id=parsed_stage_id,
         status=parsed_status,
     )
     if cmd is None:
@@ -137,13 +137,13 @@ def reorder_commands(
     The payload provides ordered command id lists keyed by category name.
     """
 
-    by_category: dict[Category, list[int]] = {}
-    for raw_category, ids in payload.by_category.items():
-        parsed = Category.from_str(raw_category)
+    by_stage_id: dict[StageId, list[int]] = {}
+    for raw_stage_id, ids in payload.by_stage_id.items():
+        parsed = StageId.from_str(raw_stage_id)
         if parsed is None:
-            raise ValidationError("Invalid category")
-        by_category[parsed] = ids
+            raise ValidationError("Invalid stage_id")
+        by_stage_id[parsed] = ids
 
     service = _service(conn)
-    service.reorder(by_category)
+    service.reorder(by_stage_id)
     return {"ok": True}

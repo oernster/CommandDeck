@@ -25,6 +25,39 @@ def test_can_update_board_name(client):
     assert data["is_new_unnamed"] is False
 
 
+def test_can_update_stage_labels(client):
+    r = client.patch(
+        "/api/board/stage-labels",
+        json={
+            "stage_labels": {
+                "DESIGN": "Design",
+                "BUILD": "Build",
+                "REVIEW": "Review",
+                "COMPLETE": "Complete",
+            }
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["stage_labels"]["DESIGN"] == "Design"
+
+
+def test_board_service_ignores_invalid_stage_labels_json(db_connection):
+    from app.repositories.board_repository import BoardRepository
+    from app.services.board_service import BoardService
+
+    # Corrupt persisted stage label data.
+    db_connection.execute(
+        "UPDATE board_state SET stage_labels_json = ? WHERE id = 1",
+        ("not-json",),
+    )
+    db_connection.commit()
+
+    service = BoardService(BoardRepository(db_connection))
+    data = service.get()
+    assert data.get("stage_labels") is None
+
+
 def test_board_repository_exists_is_true(client):
     # Implicitly verifies BoardRepository.exists() path via API access.
     r = client.get("/api/board")
@@ -43,17 +76,18 @@ def test_snapshot_save_list_and_dedupe_ignores_session_timing(client):
     # Create commands.
     r1 = client.post(
         "/api/commands",
-        json={"title": "A", "category": "Design", "status": "Not Started"},
+        json={"title": "A", "stage_id": "DESIGN", "status": "Not Started"},
     )
     assert r1.status_code == 201
     r2 = client.post(
         "/api/commands",
-        json={"title": "B", "category": "Build", "status": "In Progress"},
+        json={"title": "B", "stage_id": "BUILD", "status": "In Progress"},
     )
     assert r2.status_code == 201
 
     # Start a session (creates a runtime timestamp).
-    rs = client.post("/api/sessions/start", json={"category": "Design"})
+    cmd1 = r1.json()
+    rs = client.post("/api/sessions/start", json={"command_id": cmd1["id"]})
     assert rs.status_code == 200
 
     # Save a snapshot.
@@ -63,10 +97,10 @@ def test_snapshot_save_list_and_dedupe_ignores_session_timing(client):
     assert snap1["name"] == "Untitled board"
 
     # Stop + start another session to change timestamps but keep structural meaning
-    # (active session category remains Design after restart).
+    # (active session stage remains DESIGN after restart).
     rstop = client.post("/api/sessions/stop")
     assert rstop.status_code == 200
-    rs2 = client.post("/api/sessions/start", json={"category": "Design"})
+    rs2 = client.post("/api/sessions/start", json={"command_id": cmd1["id"]})
     assert rs2.status_code == 200
 
     s2 = client.post("/api/snapshots")
@@ -140,8 +174,8 @@ def test_snapshot_invalid_payload_rejected(client, db_connection):
 def test_snapshot_apply_payload_rolls_back_on_mid_transaction_error(db_connection):
     # Seed state to verify rollback restores.
     db_connection.execute(
-        "INSERT INTO commands (title, category, status, sort_index, created_at) VALUES (?, ?, ?, ?, ?)",
-        ("Keep", "Design", "Not Started", 1, 1),
+        "INSERT INTO commands (title, stage_id, status, sort_index, created_at) VALUES (?, ?, ?, ?, ?)",
+        ("Keep", "DESIGN", "Not Started", 1, 1),
     )
     cmd_id = int(db_connection.execute("SELECT last_insert_rowid()").fetchone()[0])
     db_connection.execute(
@@ -149,8 +183,8 @@ def test_snapshot_apply_payload_rolls_back_on_mid_transaction_error(db_connectio
         (cmd_id, "note", 1),
     )
     db_connection.execute(
-        "INSERT INTO sessions (category, started_at, ended_at) VALUES (?, ?, NULL)",
-        ("Design", 1),
+        "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) VALUES (?, ?, ?, NULL)",
+        (cmd_id, "DESIGN", 1),
     )
     db_connection.commit()
 
@@ -185,6 +219,7 @@ def test_snapshot_apply_payload_keeps_first_active_session_when_multiple(db_conn
     )
 
     payload = {
+        # v1 payload; v2 loader drops v1 sessions because they are category-level.
         "schema_version": 1,
         "board_name": "X",
         "saved_at": 1,
@@ -195,12 +230,8 @@ def test_snapshot_apply_payload_keeps_first_active_session_when_multiple(db_conn
         ],
     }
     service._apply_payload(payload)
-    rows = db_connection.execute(
-        "SELECT category, started_at, ended_at FROM sessions ORDER BY started_at ASC"
-    ).fetchall()
-    assert len(rows) == 1
-    assert rows[0][0] == "Design"
-    assert rows[0][2] is None
+    rows = db_connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    assert int(rows) == 0
 
 
 @pytest.mark.parametrize(
@@ -218,23 +249,31 @@ def test_snapshot_apply_payload_keeps_first_active_session_when_multiple(db_conn
             "commands": {"Design": [{"title": "   ", "status": "Not Started"}]},
             "sessions": [],
         },
+        # v1 sessions are ignored on load (category-level). Keep validation
+        # coverage on v2 session schema instead.
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"category": "Bad", "started_at": 1, "ended_at": None}],
+            "sessions": [{"command_id": "oops", "stage_id": "DESIGN", "started_at": 1, "ended_at": None}],
         },
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"category": "Design", "started_at": "1", "ended_at": None}],
+            "sessions": [{"command_id": 1, "stage_id": "NOPE", "started_at": 1, "ended_at": None}],
         },
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"category": "Design", "started_at": 1, "ended_at": "2"}],
+            "sessions": [{"command_id": 1, "stage_id": "DESIGN", "started_at": "1", "ended_at": None}],
+        },
+        {
+            "schema_version": 2,
+            "board_name": "X",
+            "commands": {},
+            "sessions": [{"command_id": 1, "stage_id": "DESIGN", "started_at": 1, "ended_at": "2"}],
         },
     ],
 )
@@ -246,6 +285,35 @@ def test_snapshot_apply_payload_validation_errors(db_connection, payload):
     )
     with pytest.raises(Exception):
         service._apply_payload(payload)
+
+
+def test_snapshot_apply_payload_v2_ignores_second_active_session(db_connection):
+    service = SnapshotService(
+        conn=db_connection,
+        board=BoardRepository(db_connection),
+        snapshots=SnapshotRepository(db_connection),
+    )
+
+    payload = {
+        "schema_version": 3,
+        "board_name": "X",
+        "saved_at": 1,
+        "commands": {
+            "DESIGN": [{"id": 1, "title": "A", "status": "Not Started"}],
+            "BUILD": [{"id": 2, "title": "B", "status": "Not Started"}],
+            "REVIEW": [],
+            "COMPLETE": [],
+        },
+        "sessions": [
+            {"command_id": 1, "stage_id": "DESIGN", "started_at": 1, "ended_at": None},
+            {"command_id": 2, "stage_id": "BUILD", "started_at": 2, "ended_at": None},
+        ],
+    }
+    service._apply_payload(payload)
+    rows = db_connection.execute(
+        "SELECT COUNT(*) FROM sessions WHERE ended_at IS NULL"
+    ).fetchone()[0]
+    assert int(rows) == 1
 
 
 def test_snapshot_apply_payload_raises_if_board_state_missing(db_connection):
@@ -345,7 +413,7 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(clie
     # Create a command and an outcome.
     rc = client.post(
         "/api/commands",
-        json={"title": "Cmd", "category": "Design", "status": "Not Started"},
+        json={"title": "Cmd", "stage_id": "DESIGN", "status": "Not Started"},
     )
     assert rc.status_code == 201
     cmd_id = rc.json()["id"]
@@ -354,7 +422,7 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(clie
     assert ro.status_code == 201
 
     # Start a session.
-    rs = client.post("/api/sessions/start", json={"category": "Design"})
+    rs = client.post("/api/sessions/start", json={"command_id": cmd_id})
     assert rs.status_code == 200
 
     # Save snapshot.
@@ -365,7 +433,7 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(clie
     # Mutate live board: add another command and stop session.
     rc2 = client.post(
         "/api/commands",
-        json={"title": "Other", "category": "Build", "status": "Blocked"},
+        json={"title": "Other", "stage_id": "BUILD", "status": "Blocked"},
     )
     assert rc2.status_code == 201
     rstop = client.post("/api/sessions/stop")
@@ -390,5 +458,5 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_clears_outcomes(clie
     active = client.get("/api/sessions/active")
     assert active.status_code == 200
     assert active.json().get("active", True) is not False
-    assert active.json()["category"] == "Design"
+    assert active.json()["stage_id"] == "DESIGN"
 

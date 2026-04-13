@@ -21,6 +21,17 @@
   gap: 4px;
 }
 
+.helperRow {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
+}
+
+.helperText {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.62);
+}
+
 .titleRow {
   display: flex;
   align-items: baseline;
@@ -205,13 +216,27 @@
 
 .board {
   display: grid;
-  grid-template-columns: repeat(5, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 6px;
   /* Allow the board to take remaining height so each column can scroll internally. */
   flex: 1 1 auto;
   min-height: 0;
+}
+
+.boardHasActive .column:not(.columnActive) {
+  opacity: 0.82;
+  filter: saturate(0.92);
+}
+
+.boardStartMode .card {
+  cursor: pointer;
+}
+
+.boardStartMode .card:hover {
+  border-color: rgba(90, 220, 140, 0.95);
+  box-shadow: 0 0 0 1px rgba(90, 220, 140, 0.18) inset;
 }
 
 .column {
@@ -243,6 +268,34 @@
 .columnActive {
   border-color: rgba(120, 170, 255, 0.55);
   box-shadow: 0 0 0 1px rgba(120, 170, 255, 0.16) inset;
+}
+
+.columnFocused {
+  border-color: rgba(236, 170, 78, 0.35);
+  box-shadow: 0 0 0 1px rgba(236, 170, 78, 0.10) inset;
+}
+
+.columnDropTarget {
+  outline: 2px dashed rgba(120, 170, 255, 0.55);
+  outline-offset: -3px;
+}
+
+.stageLabelInput {
+  height: 28px;
+  width: 100%;
+  max-width: 220px;
+  border-radius: 8px;
+  border: 1px solid rgba(175, 210, 255, 0.22);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 650;
+  padding: 0 8px;
+}
+
+.stageLabelInput:focus-visible {
+  outline: 2px solid rgba(120, 170, 255, 0.9);
+  outline-offset: 2px;
 }
 
 .columnHeader {
@@ -291,6 +344,10 @@
   cursor: pointer;
   /* Needed so inset rings render reliably with border-radius. */
   position: relative;
+}
+
+.cardActiveTask {
+  border-color: rgba(90, 220, 140, 0.55);
 }
 
 .cardDragging {

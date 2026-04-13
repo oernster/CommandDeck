@@ -1,46 +1,44 @@
-# <img width="40" height="40" alt="9d42c914-d72d-414d-8925-d5609b1c642b-3" src="https://github.com/user-attachments/assets/086711ea-3ac5-4cd3-a26a-31e597847a70" /> Command Deck
+# <img width="40" height="40" alt="Command Deck" src="https://github.com/user-attachments/assets/086711ea-3ac5-4cd3-a26a-31e597847a70" /> Command Deck
 
-Command Deck is an operational system for issuing intent, tracking execution, and recording outcomes.
+Command Deck is a session-driven focus tool for moving **Tasks** through a fixed 4-stage workflow.
 
-It is not a task manager.
-
-It is a control surface.
+It is intentionally minimal: one board, one active session, clear stage focus.
 
 ---
 
 ## Model
 
-Work is organised into five operational categories:
+Work is organised into **four fixed stages** (stable internal IDs):
 
-[ DESIGN ]   [ BUILD ]   [ REVIEW ]   [ MAINTAIN ]   [ RECOVER ]
+`DESIGN` · `BUILD` · `REVIEW` · `COMPLETE`
 
-These form a continuous loop of operation.
+The stage *labels* are renameable per board, but the number of stages and ordering remain fixed.
 
 ---
 
-## Commands
+## Tasks (internal name: Commands)
 
-Commands represent intent.
+In the UI we call items **Tasks**. Internally (DB/API) they are still called **Commands**.
 
-Each command belongs to a category and progresses through a simple state model:
+Each task belongs to a stage and progresses through a simple status model:
 
 - Not Started
 - In Progress
 - Blocked
 - Complete
 
-Commands are not plans.
-They are active units of execution.
+Tasks are not plans.
+They are small, active units of execution.
 
 ---
 
 ## Sessions
 
-Time is tracked at the category level.
+Time is tracked at the **task level**.
 
-Only one category is active at a time.
+Only one session can be active at a time.
 
-A session represents a period of focused operation within a category.
+Starting a session requires selecting a task; the task's stage is pinned on the session row at start.
 
 ---
 
@@ -54,25 +52,15 @@ They are attached to commands and form a historical trace of execution.
 
 ## Interface
 
-The system is presented as a single operational surface:
+The system is presented as a single board with four stage columns.
 
-[ Command Deck ]
+Global controls live in the top bar:
 
-[ DESIGN ]   [ BUILD ]   [ REVIEW ]   [ MAINTAIN ]   [ RECOVER ]
+- **Start** (enters selection mode; click a task to begin)
+- **Add** (adds a task to the focused/active stage)
+- **Stop** (stops the active session)
 
-Each column contains commands:
-
-[ Command Title        ] 🔴
-[ Command Title        ] 🟠
-[ Command Title        ] 🟢
-
-+ Add Command
-
-A session panel provides:
-
-- Active session timer
-- Start / Stop control
-- Current category
+The active stage is visually dominant; inactive stages dim slightly.
 
 ---
 

@@ -6,13 +6,13 @@ from app.domain.models import Command, Outcome, Session, epoch_seconds_to_iso860
 
 class CommandCreateRequest(BaseModel):
     title: str = Field(min_length=1)
-    category: str
+    stage_id: str
     status: str | None = None
 
 
 class CommandUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1)
-    category: str | None = None
+    stage_id: str | None = None
     status: str | None = None
 
 
@@ -24,13 +24,13 @@ class CommandReorderRequest(BaseModel):
     validate.
     """
 
-    by_category: dict[str, list[int]]
+    by_stage_id: dict[str, list[int]]
 
 
 class CommandResponse(BaseModel):
     id: int
     title: str
-    category: str
+    stage_id: str
     status: str
     created_at: str
 
@@ -39,7 +39,7 @@ class CommandResponse(BaseModel):
         return cls(
             id=cmd.id,
             title=cmd.title,
-            category=cmd.category.value,
+            stage_id=cmd.stage_id.value,
             status=cmd.status.value,
             created_at=epoch_seconds_to_iso8601_z(cmd.created_at),
         )
@@ -66,12 +66,13 @@ class OutcomeResponse(BaseModel):
 
 
 class SessionStartRequest(BaseModel):
-    category: str = Field(min_length=1)
+    command_id: int
 
 
 class SessionResponse(BaseModel):
     id: int
-    category: str
+    command_id: int
+    stage_id: str
     started_at: str
     ended_at: str | None
 
@@ -79,7 +80,8 @@ class SessionResponse(BaseModel):
     def from_model(cls, session: Session) -> "SessionResponse":
         return cls(
             id=session.id,
-            category=session.category.value,
+            command_id=session.command_id,
+            stage_id=session.stage_id.value,
             started_at=epoch_seconds_to_iso8601_z(session.started_at),
             ended_at=(
                 epoch_seconds_to_iso8601_z(session.ended_at)
@@ -93,10 +95,15 @@ class BoardResponse(BaseModel):
     name: str
     user_named: bool
     is_new_unnamed: bool
+    stage_labels: dict[str, str] | None = None
 
 
 class BoardUpdateRequest(BaseModel):
     name: str = Field(min_length=0)
+
+
+class StageLabelsUpdateRequest(BaseModel):
+    stage_labels: dict[str, str]
 
 
 class SnapshotSummary(BaseModel):
@@ -109,6 +116,6 @@ class SnapshotLoadResponse(BaseModel):
     ok: bool = True
 
 
-# Keyed by category name ("Design", "Build", ...). Value is the latest session
-# for that category, or null if no session has ever been recorded.
-SessionLatestByCategory = dict[str, SessionResponse | None]
+# Keyed by stage id ("DESIGN", "BUILD", ...). Value is the latest session
+# for that stage, or null if no session has ever been recorded.
+SessionLatestByStageId = dict[str, SessionResponse | None]

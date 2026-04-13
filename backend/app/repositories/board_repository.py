@@ -11,7 +11,7 @@ class BoardRepository:
 
     def get(self) -> dict[str, object]:
         row = self._conn.execute(
-            "SELECT name, user_named, created_at FROM board_state WHERE id = 1"
+            "SELECT name, user_named, stage_labels_json, created_at FROM board_state WHERE id = 1"
         ).fetchone()
         if row is None:
             # Should not happen because schema ensure initializes row; fail loudly.
@@ -19,7 +19,8 @@ class BoardRepository:
         return {
             "name": row[0],
             "user_named": int(row[1]),
-            "created_at": int(row[2]),
+            "stage_labels_json": row[2],
+            "created_at": int(row[3]),
         }
 
     def exists(self) -> bool:

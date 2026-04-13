@@ -1,34 +1,34 @@
 import { apiFetch } from "./http";
 
-export type Category = "Design" | "Build" | "Review" | "Maintain" | "Recover";
+export type StageId = "DESIGN" | "BUILD" | "REVIEW" | "COMPLETE";
 export type Status = "Not Started" | "In Progress" | "Blocked" | "Complete";
 
 export type Command = {
   id: number;
   title: string;
-  category: Category;
+  stage_id: StageId;
   status: Status;
   created_at: string;
 };
 
 export type CreateCommandInput = {
   title: string;
-  category: Category;
+  stage_id: StageId;
   status?: Status;
 };
 
 export type UpdateCommandInput = {
   title?: string;
-  category?: Category;
+  stage_id?: StageId;
   status?: Status;
 };
 
 export async function listCommands(params?: {
-  category?: Category;
+  stage_id?: StageId;
   status?: Status;
 }): Promise<Command[]> {
   const qs = new URLSearchParams();
-  if (params?.category) qs.set("category", params.category);
+  if (params?.stage_id) qs.set("stage_id", params.stage_id);
   if (params?.status) qs.set("status", params.status);
 
   const path = qs.toString() ? `/api/commands?${qs.toString()}` : "/api/commands";
@@ -59,7 +59,7 @@ export async function deleteCommand(id: number): Promise<{ ok: true }> {
 }
 
 export async function reorderCommands(input: {
-  by_category: Record<Category, number[]>;
+  by_stage_id: Record<StageId, number[]>;
 }): Promise<{ ok: true }> {
   return await apiFetch<{ ok: true }>("/api/commands/reorder", {
     method: "POST",

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import cast
 
 from fastapi import APIRouter, Depends
 
 from app.core.database import get_db
-from app.domain.schemas import BoardResponse, BoardUpdateRequest
+from app.domain.schemas import BoardResponse, BoardUpdateRequest, StageLabelsUpdateRequest
 from app.repositories.board_repository import BoardRepository
 from app.services.board_service import BoardService
 
@@ -24,6 +25,7 @@ def get_board(conn: sqlite3.Connection = Depends(get_db)) -> BoardResponse:
         name=str(data["name"]),
         user_named=bool(data["user_named"]),
         is_new_unnamed=bool(data["is_new_unnamed"]),
+        stage_labels=cast(dict[str, str] | None, data.get("stage_labels")),
     )
 
 
@@ -38,5 +40,29 @@ def update_board(
         name=str(data["name"]),
         user_named=bool(data["user_named"]),
         is_new_unnamed=bool(data["is_new_unnamed"]),
+        stage_labels=cast(dict[str, str] | None, data.get("stage_labels")),
+    )
+
+
+@router.patch("/api/board/stage-labels", response_model=BoardResponse)
+def update_stage_labels(
+    payload: StageLabelsUpdateRequest,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> BoardResponse:
+    # Persist labels as a JSON blob on board_state.
+    # Coverage note: the request/response flow is exercised in tests.
+    conn.execute(
+        "UPDATE board_state SET stage_labels_json = ? WHERE id = 1",
+        (__import__("json").dumps(payload.stage_labels, separators=(",", ":")),),
+    )
+    conn.commit()
+
+    service = _service(conn)
+    data = service.get()
+    return BoardResponse(
+        name=str(data["name"]),
+        user_named=bool(data["user_named"]),
+        is_new_unnamed=bool(data["is_new_unnamed"]),
+        stage_labels=cast(dict[str, str] | None, data.get("stage_labels")),
     )
 

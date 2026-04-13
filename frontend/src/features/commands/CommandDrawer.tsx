@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Category, Command, Status } from "../../api/commands";
+import type { Command, StageId, Status } from "../../api/commands";
 import { deleteCommand, updateCommand } from "../../api/commands";
 import type { Outcome } from "../../api/outcomes";
 import { createOutcome, deleteOutcome, listOutcomes } from "../../api/outcomes";
 import { isHttpError } from "../../api/http";
-import { CATEGORIES, STATUSES } from "./constants";
+import { DEFAULT_STAGE_LABELS, STAGES, STATUSES } from "./constants";
 
 import styles from "./CommandDrawer.module.css";
 
 export type CommandDrawerProps = {
   command: Command;
+  stageLabels: Record<StageId, string>;
   onClose: () => void;
   onRefreshCommands: () => Promise<void>;
   setError: (msg: string) => void;
@@ -23,10 +24,10 @@ function formatTimestamp(ts: string): string {
 }
 
 export function CommandDrawer(props: CommandDrawerProps) {
-  const { command, onClose, onRefreshCommands, setError } = props;
+  const { command, stageLabels, onClose, onRefreshCommands, setError } = props;
 
   const [title, setTitle] = useState(command.title);
-  const [category, setCategory] = useState<Category>(command.category);
+  const [stage_id, setStageId] = useState<StageId>(command.stage_id);
   const [status, setStatus] = useState<Status>(command.status);
 
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
@@ -38,9 +39,9 @@ export function CommandDrawer(props: CommandDrawerProps) {
   useEffect(() => {
     // Keep state in sync when the selected command changes.
     setTitle(command.title);
-    setCategory(command.category);
+    setStageId(command.stage_id);
     setStatus(command.status);
-  }, [command.id, command.title, command.category, command.status]);
+  }, [command.id, command.title, command.stage_id, command.status]);
 
   async function refreshOutcomes(): Promise<void> {
     setLoadingOutcomes(true);
@@ -63,10 +64,10 @@ export function CommandDrawer(props: CommandDrawerProps) {
   const dirty = useMemo(() => {
     return (
       title.trim() !== command.title ||
-      category !== command.category ||
+      stage_id !== command.stage_id ||
       status !== command.status
     );
-  }, [title, category, status, command.title, command.category, command.status]);
+  }, [title, stage_id, status, command.title, command.stage_id, command.status]);
 
   async function onSave(): Promise<void> {
     if (!dirty) return;
@@ -75,7 +76,7 @@ export function CommandDrawer(props: CommandDrawerProps) {
     try {
       await updateCommand(command.id, {
         title: title.trim(),
-        category,
+        stage_id,
         status,
       });
       await onRefreshCommands();
@@ -184,15 +185,15 @@ export function CommandDrawer(props: CommandDrawerProps) {
           </div>
 
           <div className={styles.row}>
-            <span className={styles.label}>Category</span>
+            <span className={styles.label}>Stage</span>
             <select
               className={styles.select}
-              value={category}
-              onChange={(e) => setCategory(e.target.value as Category)}
+              value={stage_id}
+              onChange={(e) => setStageId(e.target.value as StageId)}
             >
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              {STAGES.map((s) => (
+                <option key={s} value={s}>
+                  {stageLabels[s] ?? DEFAULT_STAGE_LABELS[s]}
                 </option>
               ))}
             </select>

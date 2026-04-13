@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import cast
 
 from app.repositories.board_repository import BoardRepository
@@ -14,6 +15,7 @@ class BoardService:
 
         name = cast(str | None, row["name"])
         user_named_int = cast(int, row["user_named"])
+        stage_labels_json = cast(str | None, row.get("stage_labels_json"))
         created_at = cast(int, row["created_at"])
 
         user_named = bool(int(user_named_int))
@@ -26,10 +28,23 @@ class BoardService:
         # no operational content yet.
         is_new_unnamed = (not user_named) and self._board.is_empty()
 
+        stage_labels: dict[str, str] | None = None
+        if stage_labels_json is not None and str(stage_labels_json).strip():
+            try:
+                parsed = json.loads(str(stage_labels_json))
+                if isinstance(parsed, dict) and all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in parsed.items()
+                ):
+                    stage_labels = cast(dict[str, str], parsed)
+            except Exception:
+                # Invalid persisted data should not break the board.
+                stage_labels = None
+
         return {
             "name": effective_name,
             "user_named": user_named,
             "is_new_unnamed": is_new_unnamed,
+            "stage_labels": stage_labels,
             "created_at": created_at,
         }
 

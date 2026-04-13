@@ -59,11 +59,13 @@ Routers:
 - Commands: [`backend/app/api/commands.py`](backend/app/api/commands.py:1)
 - Outcomes: [`backend/app/api/outcomes.py`](backend/app/api/outcomes.py:1)
 - Sessions: [`backend/app/api/sessions.py`](backend/app/api/sessions.py:1)
+- Board: [`backend/app/api/board.py`](backend/app/api/board.py:1)
+- Snapshots: [`backend/app/api/snapshots.py`](backend/app/api/snapshots.py:1)
 
 Notable endpoints (see router implementations for exact request/response schemas):
 
 - Commands
-  - List: [`list_commands()`](backend/app/api/commands.py:27) (`GET /api/commands`), optional `category` + `status` filters.
+  - List: [`list_commands()`](backend/app/api/commands.py:27) (`GET /api/commands`), optional `stage_id` + `status` filters.
   - Create: [`create_command()`](backend/app/api/commands.py:52) (`POST /api/commands`).
   - Update: [`update_command()`](backend/app/api/commands.py:89) (`PATCH /api/commands/{id}`).
   - Delete: [`delete_command()`](backend/app/api/commands.py:119) (`DELETE /api/commands/{id}`).
@@ -73,24 +75,43 @@ Notable endpoints (see router implementations for exact request/response schemas
   - Create: [`create_outcome()`](backend/app/api/outcomes.py:41) (`POST /api/commands/{command_id}/outcomes`).
   - Delete: [`delete_outcome()`](backend/app/api/outcomes.py:52) (`DELETE /api/outcomes/{outcome_id}`).
 - Sessions
-  - List: [`list_sessions()`](backend/app/api/sessions.py:22) (`GET /api/sessions`), optional `category` and `active`.
-  - Active session: [`get_active_session()`](backend/app/api/sessions.py:39) (`GET /api/sessions/active`).
-  - Latest session per category: [`latest_by_category()`](backend/app/api/sessions.py:50) (`GET /api/sessions/latest-by-category`).
-  - Start/stop: [`start_session()`](backend/app/api/sessions.py:68) and [`stop_session()`](backend/app/api/sessions.py:82).
+  - List: [`list_sessions()`](backend/app/api/sessions.py:27) (`GET /api/sessions`), optional `stage_id` and `active`.
+  - Active session: [`get_active_session()`](backend/app/api/sessions.py:43) (`GET /api/sessions/active`).
+  - Latest session per stage: [`latest_by_stage_id()`](backend/app/api/sessions.py:54) (`GET /api/sessions/latest-by-stage-id`).
+  - Start/stop: [`start_session()`](backend/app/api/sessions.py:72) and [`stop_session()`](backend/app/api/sessions.py:88).
+    - Start requires selecting a task/command: request body is [`SessionStartRequest`](backend/app/domain/schemas.py:68) (`{command_id: int}`).
+
+- Board
+  - Get: [`get_board()`](backend/app/api/board.py:20) (`GET /api/board`).
+  - Rename board: [`update_board()`](backend/app/api/board.py:32) (`PATCH /api/board`).
+  - Update stage labels (renameable UI labels persisted per board): [`update_stage_labels()`](backend/app/api/board.py:47) (`PATCH /api/board/stage-labels`).
+
+- Snapshots
+  - List: [`list_snapshots()`](backend/app/api/snapshots.py:26) (`GET /api/snapshots`).
+  - Save-now: [`save_snapshot()`](backend/app/api/snapshots.py:40) (`POST /api/snapshots`).
+  - Load: [`load_snapshot()`](backend/app/api/snapshots.py:51) (`POST /api/snapshots/{snapshot_id}/load`).
 
 ### 1.5 Persistence (SQLite)
 
 Connections are provided to request handlers via the FastAPI dependency [`get_db()`](backend/app/core/database.py:155).
 
-Schema is created/ensured at runtime via [`init_db()`](backend/app/core/database.py:83). v1 intentionally does not use a migrations framework; instead it performs small, safe, idempotent upgrades.
+Schema is created/ensured at runtime via [`init_db()`](backend/app/core/database.py:268). v1 intentionally does not use a migrations framework; instead it performs small, safe, idempotent upgrades.
 
-Tables (see [`init_db()`](backend/app/core/database.py:83)):
+Tables (see [`init_db()`](backend/app/core/database.py:268)):
 
-- `commands`: intent items with a persisted, per-category ordering using `sort_index`.
-  - Ordering semantics live in [`CommandRepository.list()`](backend/app/repositories/command_repository.py:13) and are persisted via [`CommandRepository.reorder()`](backend/app/repositories/command_repository.py:120).
-  - A startup schema upgrade ensures `sort_index` exists and is backfilled via [`_ensure_commands_sort_index()`](backend/app/core/database.py:15).
+- `commands`: task items with a persisted, per-stage ordering using `sort_index`.
+  - Each command has a stable `stage_id` (one of `DESIGN/BUILD/REVIEW/COMPLETE`).
+  - Ordering semantics live in [`CommandRepository.list()`](backend/app/repositories/command_repository.py:13) and are persisted via [`CommandRepository.reorder()`](backend/app/repositories/command_repository.py:136).
+  - Startup upgrades:
+    - Ensure/backfill `stage_id`: [`_ensure_commands_stage_id()`](backend/app/core/database.py:23)
+    - Ensure/backfill `sort_index`: [`_ensure_commands_sort_index()`](backend/app/core/database.py:67)
 - `outcomes`: immutable historical notes attached to commands (FK, cascade delete).
-- `sessions`: category-level time tracking; `ended_at` is `NULL` while active.
+- `sessions`: **task-bound** time tracking; a row pins `command_id` + `stage_id` at start.
+  - `ended_at` is `NULL` while active.
+  - A startup upgrade preserves any legacy category-level sessions by renaming to `sessions_legacy*` and creates v2 sessions: [`_ensure_sessions_v2()`](backend/app/core/database.py:177)
+- `board_state`: singleton board metadata.
+  - Includes `stage_labels_json` (persisted stage label overrides): [`_ensure_board_state()`](backend/app/core/database.py:138)
+- `snapshots`: named serialized board state with structural-hash dedupe: [`_ensure_snapshots()`](backend/app/core/database.py:241)
 
 Time handling:
 
@@ -99,8 +120,8 @@ Time handling:
 
 Enums:
 
-- Categories: [`Category`](backend/app/domain/enums.py:6) (`Design`, `Build`, `Review`, `Maintain`, `Recover`).
-- Status values: [`Status`](backend/app/domain/enums.py:21) (`Not Started`, `In Progress`, `Blocked`, `Complete`).
+- Stages: [`StageId`](backend/app/domain/enums.py:6) (`DESIGN`, `BUILD`, `REVIEW`, `COMPLETE`).
+- Status values: [`Status`](backend/app/domain/enums.py:42) (`Not Started`, `In Progress`, `Blocked`, `Complete`).
 
 ### 1.6 Single-address static serving (optional)
 
@@ -132,22 +153,24 @@ API client layer:
 - Commands client: [`frontend/src/api/commands.ts`](frontend/src/api/commands.ts:1)
 - Outcomes client: [`frontend/src/api/outcomes.ts`](frontend/src/api/outcomes.ts:1)
 - Sessions client: [`frontend/src/api/sessions.ts`](frontend/src/api/sessions.ts:1)
+- Board client: [`frontend/src/api/board.ts`](frontend/src/api/board.ts:1)
+- Snapshots client: [`frontend/src/api/snapshots.ts`](frontend/src/api/snapshots.ts:1)
 
 Primary UI feature:
 
-- Board (columns by category), drag-and-drop ordering, session panel + live timer: [`Board`](frontend/src/features/commands/Board.tsx:39)
+- Board (columns by stage), drag-and-drop ordering, global Start/Add/Stop, session selection-mode + live timer: [`Board`](frontend/src/features/commands/Board.tsx:44)
 - Command detail drawer (edit + outcomes): [`CommandDrawer`](frontend/src/features/commands/CommandDrawer.tsx:1)
 - Create command modal: [`CreateCommandModal`](frontend/src/features/commands/CreateCommandModal.tsx:1)
 
 Frontend state model (deliberately small):
 
-- Load commands and session state on mount, then refetch after mutations (see [`refresh()`](frontend/src/features/commands/Board.tsx:106)).
+- Load commands, board state, and session state on mount, then refetch after mutations (see [`refresh()`](frontend/src/features/commands/Board.tsx:118)).
 - Session timer is derived client-side from the active session `started_at` timestamp and an interval tick (see [`nowMs`](frontend/src/features/commands/Board.tsx:58)).
-- Reordering is persisted by sending full per-category id lists to `POST /api/commands/reorder` (see [`commitReorder()`](frontend/src/features/commands/Board.tsx:100)).
+- Reordering is persisted by sending full per-stage id lists to `POST /api/commands/reorder` (see [`commitReorder()`](frontend/src/features/commands/Board.tsx:112)).
 
 Constants mirror backend enums:
 
-- Categories/status lists used by the UI live in [`frontend/src/features/commands/constants.ts`](frontend/src/features/commands/constants.ts:1).
+- Stage/status lists used by the UI live in [`frontend/src/features/commands/constants.ts`](frontend/src/features/commands/constants.ts:1).
 
 ## 3) Local tray launcher (Windows-only)
 
