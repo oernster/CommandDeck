@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from app.repositories.command_repository import CommandRepository
+
 
 def test_create_and_list_commands(client) -> None:
     create = client.post(
@@ -214,6 +216,44 @@ def test_fastapi_request_validation_errors_are_mapped_to_400(client) -> None:
     resp = client.post("/api/commands", json={"title": "X"})
     assert resp.status_code == 400
     assert resp.json() == {"error": "Invalid request"}
+
+
+def test_create_command_rejects_duplicate_title_case_insensitive(client) -> None:
+    first = client.post(
+        "/api/commands",
+        json={"title": "Duplicate", "stage_id": "DESIGN"},
+    )
+    assert first.status_code == 201
+
+    dup = client.post(
+        "/api/commands",
+        json={"title": "  duplicate  ", "stage_id": "BUILD"},
+    )
+    assert dup.status_code == 400
+    assert dup.json() == {"error": "A task with that title already exists"}
+
+
+def test_update_command_rejects_duplicate_title(client) -> None:
+    c1 = client.post(
+        "/api/commands",
+        json={"title": "One", "stage_id": "DESIGN"},
+    ).json()
+    c2 = client.post(
+        "/api/commands",
+        json={"title": "Two", "stage_id": "DESIGN"},
+    ).json()
+
+    resp = client.patch(
+        f"/api/commands/{c2['id']}",
+        json={"title": "one"},
+    )
+    assert resp.status_code == 400
+    assert resp.json() == {"error": "A task with that title already exists"}
+
+
+def test_repo_title_exists_returns_false_for_blank_title(db_connection: sqlite3.Connection) -> None:
+    repo = CommandRepository(db_connection)
+    assert repo.title_exists("   ") is False
 
 
 def test_reorder_commands_persists_ordering_within_and_across_stages(

@@ -22,11 +22,18 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
   const [stage_id, setStageId] = useState<StageId>(initialStageId);
   const [status, setStatus] = useState<Status>("Not Started");
   const [saving, setSaving] = useState(false);
+  const [inlineNotice, setInlineNotice] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!inlineNotice) return;
+    const t = window.setTimeout(() => setInlineNotice(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [inlineNotice]);
 
   const canSubmit = useMemo(() => title.trim().length > 0 && !saving, [title, saving]);
 
@@ -35,6 +42,7 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
     if (!canSubmit) return;
 
     setError("");
+    setInlineNotice(null);
     setSaving(true);
     try {
       await createCommand({ title: title.trim(), stage_id, status });
@@ -43,6 +51,13 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
     } catch (err) {
       const msg = isHttpError(err) ? err.message : "Could not create command";
       setError(msg);
+
+      if (isHttpError(err) && err.status === 400) {
+        const normalized = err.message.trim().toLowerCase();
+        if (normalized.includes("already exists") || normalized.includes("duplicate")) {
+          setInlineNotice("Duplicate task title - choose a different name.");
+        }
+      }
     } finally {
       setSaving(false);
     }
@@ -75,6 +90,8 @@ export function CreateCommandModal(props: CreateCommandModalProps) {
         </div>
 
         <div className={styles.body}>
+          {inlineNotice ? <div className={styles.inlineNotice}>{inlineNotice}</div> : null}
+
           <div className={styles.row}>
             <span className={styles.label}>Title</span>
             <input

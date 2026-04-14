@@ -44,6 +44,17 @@
   gap: 10px;
 }
 
+.inlineNotice {
+  grid-column: 1 / -1;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 110, 110, 0.25);
+  background: rgba(255, 110, 110, 0.10);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .row {
   display: grid;
   grid-template-columns: 120px 1fr;

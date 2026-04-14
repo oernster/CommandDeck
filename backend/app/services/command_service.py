@@ -24,11 +24,16 @@ class CommandService:
         return self._repo.list(stage_id=stage_id, status=status)
 
     def create(self, title: str, stage_id: StageId, status: Status) -> Command:
-        if title.strip() == "":
+        cleaned = title.strip()
+        if cleaned == "":
             raise ValidationError("Title must not be empty")
+
+        if self._repo.title_exists(cleaned):
+            raise ValidationError("A task with that title already exists")
+
         created_at = int(self._now_epoch_seconds())
         return self._repo.create(
-            title=title.strip(),
+            title=cleaned,
             stage_id=stage_id,
             status=status,
             created_at=created_at,
@@ -47,6 +52,10 @@ class CommandService:
         if title is not None and title.strip() == "":
             raise ValidationError("Title must not be empty")
         stripped = title.strip() if title is not None else None
+
+        if stripped is not None and self._repo.title_exists(stripped, exclude_id=command_id):
+            raise ValidationError("A task with that title already exists")
+
         return self._repo.update(
             command_id=command_id,
             title=stripped,

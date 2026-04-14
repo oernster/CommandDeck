@@ -74,6 +74,32 @@ class CommandRepository:
             created_at=created_at,
         )
 
+    def title_exists(self, title: str, *, exclude_id: int | None = None) -> bool:
+        """Return True if a command exists with the given title.
+
+        Comparison is case-insensitive and ignores surrounding whitespace.
+        """
+        cleaned = title.strip()
+        if cleaned == "":
+            return False
+
+        if exclude_id is None:
+            row = self._conn.execute(
+                "SELECT 1 FROM commands WHERE lower(title) = lower(?) LIMIT 1",
+                (cleaned,),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                (
+                    "SELECT 1 FROM commands "
+                    "WHERE lower(title) = lower(?) AND id <> ? "
+                    "LIMIT 1"
+                ),
+                (cleaned, exclude_id),
+            ).fetchone()
+
+        return row is not None
+
     def update(
         self,
         command_id: int,
