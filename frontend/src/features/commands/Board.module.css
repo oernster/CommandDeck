@@ -696,8 +696,29 @@
 
 .cardTitleRight {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.cardControlsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cardControlsLeft {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cardControlsRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
@@ -850,6 +871,39 @@
 
 .cardOutcomeItem {
   position: relative;
+}
+
+.cardOutcomeRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.cardOutcomeDeleteButton {
+  flex: 0 0 auto;
+  height: 28px;
+  width: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 110, 110, 0.28);
+  background: rgba(255, 110, 110, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.cardOutcomeDeleteButton:hover,
+.cardOutcomeDeleteButton:focus-visible {
+  border-color: rgba(255, 92, 92, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.14) inset;
+  outline: none;
+}
+
+.cardOutcomeDeleteButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 /* Yellow/orange divider between outcomes (indented; matches stage title color). */
@@ -1020,7 +1074,8 @@
 }
 
 .statusSelect {
-  width: 140px;
+  width: max-content;
+  max-width: 130px;
   height: 28px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1028,6 +1083,32 @@
   color: rgba(255, 255, 255, 0.92);
   font-size: 12px;
   padding: 0 8px;
+}
+
+.dangerIconButton {
+  height: 28px;
+  width: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 110, 110, 0.35);
+  background: rgba(255, 110, 110, 0.10);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.dangerIconButton:hover,
+.dangerIconButton:focus-visible {
+  border-color: rgba(255, 92, 92, 0.75);
+  box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.14) inset;
+  outline: none;
+}
+
+.dangerIconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 /* Compact layout for smaller laptop displays (e.g. 1366x768 at 100%). */

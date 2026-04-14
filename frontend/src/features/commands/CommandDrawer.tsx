@@ -7,6 +7,8 @@ import { createOutcome, deleteOutcome, listOutcomes } from "../../api/outcomes";
 import { isHttpError } from "../../api/http";
 import { DEFAULT_STAGE_LABELS, STAGES, STATUSES } from "./constants";
 
+import { ConfirmDangerModal } from "../../components/ConfirmDangerModal";
+
 import styles from "./CommandDrawer.module.css";
 
 export type CommandDrawerProps = {
@@ -40,6 +42,10 @@ export function CommandDrawer(props: CommandDrawerProps) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const [deleteCommandModalOpen, setDeleteCommandModalOpen] = useState(false);
+  const [deleteOutcomeModalOpen, setDeleteOutcomeModalOpen] = useState(false);
+  const [outcomeToDelete, setOutcomeToDelete] = useState<Outcome | null>(null);
 
   useEffect(() => {
     // Keep state in sync when the selected command changes.
@@ -94,15 +100,13 @@ export function CommandDrawer(props: CommandDrawerProps) {
   }
 
   async function onDelete(): Promise<void> {
-    const ok = window.confirm("Delete this command?");
-    if (!ok) return;
-
     setError("");
     setSaving(true);
     try {
       await deleteCommand(command.id);
       await onRefreshCommands();
       onClose();
+      setDeleteCommandModalOpen(false);
     } catch (err) {
       const msg = isHttpError(err) ? err.message : "Could not delete command";
       setError(msg);
@@ -132,15 +136,14 @@ export function CommandDrawer(props: CommandDrawerProps) {
   }
 
   async function onDeleteOutcome(outcomeId: number): Promise<void> {
-    const ok = window.confirm("Delete this outcome?");
-    if (!ok) return;
-
     setError("");
     setSaving(true);
     try {
       await deleteOutcome(outcomeId);
       await refreshOutcomes();
       await onRefreshCommands();
+      setDeleteOutcomeModalOpen(false);
+      setOutcomeToDelete(null);
     } catch (err) {
       const msg = isHttpError(err) ? err.message : "Could not delete outcome";
       setError(msg);
@@ -149,12 +152,23 @@ export function CommandDrawer(props: CommandDrawerProps) {
     }
   }
 
+  function beginDeleteOutcome(o: Outcome): void {
+    setOutcomeToDelete(o);
+    setDeleteOutcomeModalOpen(true);
+  }
+
   function onBackdropMouseDown(e: React.MouseEvent<HTMLDivElement>): void {
     if (e.target === e.currentTarget) onClose();
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
-    if (e.key === "Escape") onClose();
+    if (e.key !== "Escape") return;
+
+    // If a confirmation modal is open, Escape should cancel that modal first
+    // (handled by ConfirmDangerModal), not close the drawer.
+    if (deleteCommandModalOpen || deleteOutcomeModalOpen) return;
+
+    onClose();
   }
 
   return (
@@ -167,6 +181,33 @@ export function CommandDrawer(props: CommandDrawerProps) {
       onKeyDown={onKeyDown}
       tabIndex={-1}
     >
+      {deleteCommandModalOpen ? (
+        <ConfirmDangerModal
+          title="Delete task?"
+          body={`Delete “${command.title}”? This will permanently remove the task and its outcomes/sessions. This cannot be undone.`}
+          busy={saving}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          onConfirm={() => void onDelete()}
+          onCancel={() => setDeleteCommandModalOpen(false)}
+        />
+      ) : null}
+
+      {deleteOutcomeModalOpen && outcomeToDelete ? (
+        <ConfirmDangerModal
+          title="Delete outcome?"
+          body={`Delete this outcome? “${outcomeToDelete.note}” This cannot be undone.`}
+          busy={saving}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          onConfirm={() => void onDeleteOutcome(outcomeToDelete.id)}
+          onCancel={() => {
+            setDeleteOutcomeModalOpen(false);
+            setOutcomeToDelete(null);
+          }}
+        />
+      ) : null}
+
       <aside className={styles.drawer}>
         <div className={styles.header}>
           <div>
@@ -222,8 +263,14 @@ export function CommandDrawer(props: CommandDrawerProps) {
           </div>
 
           <div className={styles.actions}>
-            <button type="button" className={styles.danger} onClick={() => void onDelete()}>
-              Delete
+            <button
+              type="button"
+              className={styles.danger}
+              onClick={() => setDeleteCommandModalOpen(true)}
+              aria-label="Delete task"
+              title="Delete"
+            >
+              🗑️
             </button>
 
             <button
@@ -254,9 +301,11 @@ export function CommandDrawer(props: CommandDrawerProps) {
                   <button
                     type="button"
                     className={styles.secondary}
-                    onClick={() => void onDeleteOutcome(o.id)}
+                    onClick={() => beginDeleteOutcome(o)}
+                    aria-label="Delete outcome"
+                    title="Delete"
                   >
-                    Delete
+                    🗑️
                   </button>
                 </div>
               </div>

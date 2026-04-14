@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 
 def test_create_and_list_commands(client) -> None:
     create = client.post(
@@ -71,11 +73,24 @@ def test_update_stage_id_valid_value_exercises_branch(client) -> None:
     assert upd.json()["stage_id"] == "BUILD"
 
 
-def test_delete_command(client) -> None:
+def test_delete_command(client, db_connection: sqlite3.Connection) -> None:
     created = client.post(
         "/api/commands",
         json={"title": "Delete me", "stage_id": "COMPLETE"},
     ).json()
+
+    # Create related data that must be hard-deleted (no ghost rows).
+    out = client.post(
+        f"/api/commands/{created['id']}/outcomes",
+        json={"note": "First note"},
+    )
+    assert out.status_code == 201
+
+    sess = client.post(
+        "/api/sessions/start",
+        json={"command_id": created["id"]},
+    )
+    assert sess.status_code == 200
 
     deleted = client.delete(f"/api/commands/{created['id']}")
     assert deleted.status_code == 200
@@ -83,6 +98,35 @@ def test_delete_command(client) -> None:
 
     missing = client.get(f"/api/commands/{created['id']}")
     assert missing.status_code == 404
+
+    # Hard delete (no ghost rows): outcomes + sessions must be removed.
+    outcomes_count = int(
+        db_connection.execute(
+            "SELECT COUNT(*) FROM outcomes WHERE command_id = ?",
+            (created["id"],),
+        ).fetchone()[0]
+    )
+    assert outcomes_count == 0
+
+    sessions_count = int(
+        db_connection.execute(
+            "SELECT COUNT(*) FROM sessions WHERE command_id = ?",
+            (created["id"],),
+        ).fetchone()[0]
+    )
+    assert sessions_count == 0
+
+    # API behavior: the outcomes list endpoint should return 404 (not an empty
+    # list), because the command no longer exists.
+    outcomes_after = client.get(f"/api/commands/{created['id']}/outcomes")
+    assert outcomes_after.status_code == 404
+    assert outcomes_after.json() == {"error": "Command not found"}
+
+    # Cascading delete: any sessions that referenced the command should be gone.
+    # The API should report no active session.
+    active = client.get("/api/sessions/active")
+    assert active.status_code == 200
+    assert active.json() == {"active": False}
 
 
 def test_validation_errors_are_400_with_simple_shape(client) -> None:

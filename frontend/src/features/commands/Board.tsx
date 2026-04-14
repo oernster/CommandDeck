@@ -38,6 +38,7 @@ import type { SnapshotSummary } from "../../api/snapshots";
 import type { Outcome } from "../../api/outcomes";
 import { listOutcomesByCommand } from "../../api/outcomes";
 import { createOutcome } from "../../api/outcomes";
+import { deleteOutcome } from "../../api/outcomes";
 
 import commandDeckLogo from "../../assets/CommandDeck.png";
 
@@ -115,6 +116,16 @@ export function Board() {
   const [focusedStageId, setFocusedStageId] = useState<StageId>("DESIGN");
   const [createFor, setCreateFor] = useState<StageId | null>(null);
   const [selected, setSelected] = useState<Command | null>(null);
+
+  const [deleteCommandModalOpen, setDeleteCommandModalOpen] = useState(false);
+  const [deleteCommandBusy, setDeleteCommandBusy] = useState(false);
+  const [commandToDelete, setCommandToDelete] = useState<Command | null>(null);
+
+  const [deleteOutcomeModalOpen, setDeleteOutcomeModalOpen] = useState(false);
+  const [outcomeToDelete, setOutcomeToDelete] = useState<{
+    commandId: number;
+    outcome: Outcome;
+  } | null>(null);
 
   // Used to force a drawer outcomes refresh when an outcome is created inline.
   const [drawerOutcomesNonce, setDrawerOutcomesNonce] = useState(0);
@@ -302,6 +313,58 @@ export function Board() {
     }
   }
 
+  async function onDeleteInlineOutcome(commandId: number, outcomeId: number): Promise<boolean> {
+    // Avoid opening the drawer due to the click that triggered the delete.
+    suppressNextCardClickByCommandId.current[commandId] = true;
+    window.setTimeout(() => {
+      suppressNextCardClickByCommandId.current[commandId] = false;
+    }, 0);
+
+    setSavingOutcomeByCommandId((prev) => ({ ...prev, [commandId]: true }));
+    setError(null);
+    try {
+      await deleteOutcome(outcomeId);
+
+      // Update local state immediately.
+      setOutcomesByCommandId((prev) => {
+        const next = { ...prev };
+        next[commandId] = (next[commandId] ?? []).filter((o) => o.id !== outcomeId);
+        return next;
+      });
+
+      setDrawerOutcomesNonce((n) => n + 1);
+      return true;
+    } catch (e) {
+      const msg = isHttpError(e) ? e.message : "Could not delete outcome";
+      setError(msg);
+      return false;
+    } finally {
+      setSavingOutcomeByCommandId((prev) => ({ ...prev, [commandId]: false }));
+    }
+  }
+
+  function beginDeleteInlineOutcome(commandId: number, outcome: Outcome): void {
+    // Avoid opening drawer due to the click that triggered the delete.
+    suppressNextCardClickByCommandId.current[commandId] = true;
+    window.setTimeout(() => {
+      suppressNextCardClickByCommandId.current[commandId] = false;
+    }, 0);
+
+    setOutcomeToDelete({ commandId, outcome });
+    setDeleteOutcomeModalOpen(true);
+  }
+
+  function closeDeleteOutcomeModal(): void {
+    setDeleteOutcomeModalOpen(false);
+    setOutcomeToDelete(null);
+  }
+
+  async function confirmDeleteInlineOutcome(): Promise<void> {
+    if (!outcomeToDelete) return;
+    const ok = await onDeleteInlineOutcome(outcomeToDelete.commandId, outcomeToDelete.outcome.id);
+    if (ok) closeDeleteOutcomeModal();
+  }
+
   useEffect(() => {
     void refresh();
   }, []);
@@ -326,32 +389,6 @@ export function Board() {
         <path
           fill="currentColor"
           d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm18.71-11.04a1.003 1.003 0 0 0 0-1.42l-2.5-2.5a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.99-1.66Z"
-        />
-      </svg>
-    );
-  }
-
-  function trashSvg() {
-    return (
-      <svg
-        className={styles.icon}
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true"
-      >
-        <path
-          d="M9 3h6m-8 4h10m-1 0-1 14H8L7 7"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M10 11v6m4-6v6"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
         />
       </svg>
     );
@@ -412,8 +449,13 @@ export function Board() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [startMode]);
 
-  function openCreate(stage_id: StageId): void {
-    setCreateFor(stage_id);
+  function openCreate(_stage_id: StageId): void {
+    // UX rule: new tasks always default to DESIGN.
+    // If the user is in Start mode, opening the Create modal should cancel it;
+    // otherwise the Start button becomes a confusing toggle (Start -> Add ->
+    // Start again would actually turn Start mode off).
+    setStartMode(false);
+    setCreateFor("DESIGN");
   }
 
   async function onChangeStatus(id: number, status: Status): Promise<void> {
@@ -482,18 +524,51 @@ export function Board() {
     }
   }
 
-  async function onDelete(id: number): Promise<void> {
-    const ok = window.confirm("Delete this command?");
-    if (!ok) return;
-
+  async function onDelete(id: number): Promise<boolean> {
     setError(null);
+    setDeleteCommandBusy(true);
     try {
       await deleteCommand(id);
       await refresh();
+
+      // If the deleted command was selected, close the drawer to avoid showing
+      // stale/ghost content.
+      setSelected((prev) => (prev?.id === id ? null : prev));
+      return true;
     } catch (e) {
       const msg = isHttpError(e) ? e.message : "Could not delete command";
       setError(msg);
+      // Keep the modal open so the user can retry or cancel.
+      return false;
+    } finally {
+      setDeleteCommandBusy(false);
     }
+  }
+
+  function beginDeleteCommand(cmd: Command): void {
+    // Prevent the delete click from also selecting the card (which would open
+    // the drawer while deletion is in-flight).
+    suppressNextCardClickByCommandId.current[cmd.id] = true;
+    window.setTimeout(() => {
+      suppressNextCardClickByCommandId.current[cmd.id] = false;
+    }, 0);
+
+    setCommandToDelete(cmd);
+    setDeleteCommandModalOpen(true);
+    setDeleteCommandBusy(false);
+  }
+
+  function closeDeleteCommandModal(): void {
+    setDeleteCommandModalOpen(false);
+    setDeleteCommandBusy(false);
+    setCommandToDelete(null);
+  }
+
+  async function confirmDeleteCommand(): Promise<void> {
+    if (!commandToDelete) return;
+
+    const ok = await onDelete(commandToDelete.id);
+    if (ok) closeDeleteCommandModal();
   }
 
   function gripSvg() {
@@ -1177,7 +1252,7 @@ export function Board() {
                               beginDeleteSnapshot(s);
                             }}
                           >
-                            {trashSvg()}
+                            🗑️
                           </button>
                         </>
                       )}
@@ -1226,6 +1301,30 @@ export function Board() {
           cancelLabel="No"
           onConfirm={() => void confirmDeleteSnapshot()}
           onCancel={closeDeleteSnapshotModal}
+        />
+      ) : null}
+
+      {deleteCommandModalOpen && commandToDelete ? (
+        <ConfirmDangerModal
+          title="Delete task?"
+          body={`Delete “${commandToDelete.title}”? This will permanently remove the task and its outcomes/sessions. This cannot be undone.`}
+          busy={deleteCommandBusy}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          onConfirm={() => void confirmDeleteCommand()}
+          onCancel={closeDeleteCommandModal}
+        />
+      ) : null}
+
+      {deleteOutcomeModalOpen && outcomeToDelete ? (
+        <ConfirmDangerModal
+          title="Delete outcome?"
+          body={`Delete this outcome? “${outcomeToDelete.outcome.note}” This cannot be undone.`}
+          busy={!!savingOutcomeByCommandId[outcomeToDelete.commandId]}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          onConfirm={() => void confirmDeleteInlineOutcome()}
+          onCancel={closeDeleteOutcomeModal}
         />
       ) : null}
 
@@ -1334,13 +1433,19 @@ export function Board() {
                       ? styles.cardDropAfter
                       : ""
                   }`}
+                  onClickCapture={(e) => {
+                    // In Start mode, *any* click on a card should start the
+                    // session for that task. We capture the event so nested
+                    // buttons/inputs (rename, delete, etc.) can't swallow the
+                    // click via stopPropagation.
+                    if (!startMode || startDisabled) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setStartMode(false);
+                    void onStartSession(cmd.id);
+                  }}
                   onClick={() => {
                     if (suppressNextCardClickByCommandId.current[cmd.id]) return;
-                    if (startMode && !startDisabled) {
-                      setStartMode(false);
-                      void onStartSession(cmd.id);
-                      return;
-                    }
                     setSelected(cmd);
                   }}
                   onDragOver={(e) => onCardDragOver(e, stage_id, cmd)}
@@ -1405,16 +1510,40 @@ export function Board() {
                           <span className={styles.cardTitleSaving}>Saving…</span>
                         ) : null}
                       </div>
+                    </div>
 
-                      <div className={styles.cardTitleRight}>
+                    {/* Second row: controls (kept separate so the title has breathing room). */}
+                    <div
+                      className={styles.cardControlsRow}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className={styles.cardControlsLeft}>
+                        <label className={styles.statusLabel}>
+                          <span className={styles.visuallyHidden}>Status</span>
+                          <select
+                            className={styles.statusSelect}
+                            value={cmd.status}
+                            onChange={(e) =>
+                              void onChangeStatus(cmd.id, e.target.value as Status)
+                            }
+                          >
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className={styles.cardControlsRight}>
                         <button
                           type="button"
                           className={styles.dragHandle}
                           draggable
                           aria-label="Reorder"
                           title="Drag to reorder"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => e.stopPropagation()}
                           onDragStart={(e) => onGripDragStart(e, cmd)}
                           onDragEnd={onGripDragEnd}
                         >
@@ -1425,6 +1554,16 @@ export function Board() {
                           aria-label={`Status: ${cmd.status}`}
                           title={cmd.status}
                         />
+
+                        <button
+                          type="button"
+                          className={styles.dangerIconButton}
+                          onClick={() => beginDeleteCommand(cmd)}
+                          aria-label="Delete task"
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </div>
 
@@ -1492,25 +1631,39 @@ export function Board() {
                             <div className={styles.cardOutcomeList}>
                               {(outcomesByCommandId[cmd.id] ?? []).map((o) => (
                                 <div key={o.id} className={styles.cardOutcomeItem}>
-                                  <button
-                                    type="button"
-                                    className={styles.cardOutcomeRowButton}
-                                    title="Edit latest outcome (saves as a new outcome entry)"
-                                    aria-label="Edit latest outcome"
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      beginEditLatestOutcome(cmd.id);
-                                    }}
-                                  >
-                                    <span
-                                      className={styles.cardOutcomeRowIcon}
-                                      aria-hidden="true"
+                                  <div className={styles.cardOutcomeRow}>
+                                    <button
+                                      type="button"
+                                      className={styles.cardOutcomeRowButton}
+                                      title="Edit latest outcome (saves as a new outcome entry)"
+                                      aria-label="Edit latest outcome"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        beginEditLatestOutcome(cmd.id);
+                                      }}
                                     >
-                                      {pencilSvg()}
-                                    </span>
-                                    <span className={styles.cardOutcomeRowText}>{o.note}</span>
-                                  </button>
+                                      <span className={styles.cardOutcomeRowIcon} aria-hidden="true">
+                                        {pencilSvg()}
+                                      </span>
+                                      <span className={styles.cardOutcomeRowText}>{o.note}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      className={styles.cardOutcomeDeleteButton}
+                                      aria-label="Delete outcome"
+                                      title="Delete"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        beginDeleteInlineOutcome(cmd.id, o);
+                                      }}
+                                      disabled={!!savingOutcomeByCommandId[cmd.id]}
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -1541,34 +1694,7 @@ export function Board() {
                       ) : null}
                     </div>
 
-                    <div className={styles.cardActions}>
-                      <label className={styles.statusLabel}>
-                        <span className={styles.visuallyHidden}>Status</span>
-                        <select
-                          className={styles.statusSelect}
-                          value={cmd.status}
-                          onChange={(e) =>
-                            void onChangeStatus(cmd.id, e.target.value as Status)
-                          }
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <button
-                        type="button"
-                        className={styles.dangerButton}
-                        onClick={() => void onDelete(cmd.id)}
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    {/* Controls moved into the title row for tighter layout. */}
                   </div>
                 </div>
               ))}
