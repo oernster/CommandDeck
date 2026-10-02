@@ -267,7 +267,7 @@ def test_snapshot_default_name_uses_stage_label_and_handles_invalid_labels_json(
     s1 = client.post("/api/snapshots")
     assert s1.status_code == 201
     snap1 = s1.json()
-    assert snap1["name"].startswith("Sketch – ")
+    assert snap1["name"].startswith("Sketch: ")
 
     # Corrupt stage label data to hit the exception branch in _get_stage_label.
     db_connection.execute(

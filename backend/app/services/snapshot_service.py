@@ -116,9 +116,9 @@ class SnapshotService:
         if active is not None:
             stage_id = active.stage_id
             label = self._get_stage_label(stage_id)
-            return f"{label} – {now_local:%H:%M}"
+            return f"{label}: {now_local:%H:%M}"
 
-        return f"Snapshot – {now_local:%Y-%m-%d %H:%M}"
+        return f"Snapshot: {now_local:%Y-%m-%d %H:%M}"
 
     def _get_stage_label(self, stage_id: StageId) -> str:
         """Return display label for a stage.
