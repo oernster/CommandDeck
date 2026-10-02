@@ -59,4 +59,3 @@ class BoardService:
         # Allow setting to empty string -> treat as NULL so default applies.
         self._board.set_name(name=(cleaned if cleaned else None))
         return self.get()
-

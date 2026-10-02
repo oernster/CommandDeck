@@ -47,4 +47,3 @@ def test_outcomes_latest_ignores_missing_commands(client) -> None:
     resp = client.post("/api/outcomes/latest", json={"command_ids": [999]})
     assert resp.status_code == 200
     assert resp.json() == {"by_command_id": {}, "counts_by_command_id": {}}
-

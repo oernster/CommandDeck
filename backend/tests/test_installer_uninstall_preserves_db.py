@@ -41,7 +41,9 @@ def test_uninstall_preserves_db_by_default(tmp_path: Path) -> None:
 
     dummy = _Dummy()
     preserve = guiinstaller.InstallerWindow._sqlite_related_paths(dummy, db)
-    guiinstaller.InstallerWindow._delete_tree(dummy, install_dir, preserve_paths=preserve)
+    guiinstaller.InstallerWindow._delete_tree(
+        dummy, install_dir, preserve_paths=preserve
+    )
 
     assert db.exists()
     assert wal.exists()
@@ -80,4 +82,3 @@ def test_uninstall_wipe_data_deletes_db_and_sidecars(tmp_path: Path) -> None:
     assert not shm.exists()
     assert not (install_dir / "some_file.txt").exists()
     assert not install_dir.exists()
-

@@ -52,9 +52,9 @@ class SnapshotService:
         """
 
         now_epoch_seconds = int(
-            self._conn.execute("SELECT CAST(strftime('%s','now') AS INTEGER)").fetchone()[
-                0
-            ]
+            self._conn.execute(
+                "SELECT CAST(strftime('%s','now') AS INTEGER)"
+            ).fetchone()[0]
         )
         board_row = self._board.get()
         board_name_raw = board_row["name"]
@@ -64,12 +64,16 @@ class SnapshotService:
             else "Untitled board"
         )
 
-        cleaned_name = (name.strip() if isinstance(name, str) else "")
+        cleaned_name = name.strip() if isinstance(name, str) else ""
         snapshot_name = (
-            cleaned_name if cleaned_name else self._build_default_snapshot_name(board_name=board_name)
+            cleaned_name
+            if cleaned_name
+            else self._build_default_snapshot_name(board_name=board_name)
         )
 
-        payload = self._serialize_payload(board_name=board_name, saved_at=now_epoch_seconds)
+        payload = self._serialize_payload(
+            board_name=board_name, saved_at=now_epoch_seconds
+        )
         structural = self._structural_form(payload)
 
         payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
@@ -334,7 +338,9 @@ class SnapshotService:
 
         # Apply in a single transaction: clear outcomes, then sessions, then commands.
         now_epoch_seconds = int(
-            self._conn.execute("SELECT CAST(strftime('%s','now') AS INTEGER)").fetchone()[0]
+            self._conn.execute(
+                "SELECT CAST(strftime('%s','now') AS INTEGER)"
+            ).fetchone()[0]
         )
         self._conn.execute("BEGIN")
         try:
@@ -469,4 +475,3 @@ class SnapshotService:
         except Exception:
             self._conn.rollback()
             raise
-

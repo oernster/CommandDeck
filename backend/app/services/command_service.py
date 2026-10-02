@@ -53,7 +53,9 @@ class CommandService:
             raise ValidationError("Title must not be empty")
         stripped = title.strip() if title is not None else None
 
-        if stripped is not None and self._repo.title_exists(stripped, exclude_id=command_id):
+        if stripped is not None and self._repo.title_exists(
+            stripped, exclude_id=command_id
+        ):
             raise ValidationError("A task with that title already exists")
 
         return self._repo.update(

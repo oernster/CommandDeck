@@ -251,7 +251,9 @@ def test_update_command_rejects_duplicate_title(client) -> None:
     assert resp.json() == {"error": "A task with that title already exists"}
 
 
-def test_repo_title_exists_returns_false_for_blank_title(db_connection: sqlite3.Connection) -> None:
+def test_repo_title_exists_returns_false_for_blank_title(
+    db_connection: sqlite3.Connection,
+) -> None:
     repo = CommandRepository(db_connection)
     assert repo.title_exists("   ") is False
 

@@ -64,7 +64,9 @@ class SessionRepository:
 
         return list(latest.values())
 
-    def start(self, command_id: int, stage_id: StageId, now_epoch_seconds: int) -> Session:
+    def start(
+        self, command_id: int, stage_id: StageId, now_epoch_seconds: int
+    ) -> Session:
         """Stop any active session and start a new one in a single transaction."""
         self._conn.execute("BEGIN")
         try:

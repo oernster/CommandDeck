@@ -43,4 +43,3 @@ def test_outcomes_by_command_ignores_missing_commands_but_includes_key(client) -
     resp = client.post("/api/outcomes/by-command", json={"command_ids": [999]})
     assert resp.status_code == 200
     assert resp.json() == {"by_command_id": {"999": []}}
-

@@ -72,7 +72,9 @@ def test_reset_board_clears_operational_state_and_preserves_metadata(client) -> 
 
 
 def test_snapshot_save_accepts_explicit_name_and_trims(client) -> None:
-    r = client.post("/api/snapshots", json={"name": "  Before reset - 2026-04-13 12:34  "})
+    r = client.post(
+        "/api/snapshots", json={"name": "  Before reset - 2026-04-13 12:34  "}
+    )
     assert r.status_code == 201
     data = r.json()
     assert data["name"] == "Before reset - 2026-04-13 12:34"
@@ -96,8 +98,9 @@ def test_board_reset_rolls_back_on_error(db_connection) -> None:
     repo = BoardRepository(db_connection)
     try:
         repo.reset_live_state()
-        assert False, "Expected reset_live_state to raise when outcomes table is missing"
+        assert (
+            False
+        ), "Expected reset_live_state to raise when outcomes table is missing"
     except Exception:
         # The rollback branch must be covered; any exception is sufficient.
         pass
-

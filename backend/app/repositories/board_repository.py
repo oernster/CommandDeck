@@ -60,4 +60,3 @@ class BoardRepository:
         except Exception:
             self._conn.rollback()
             raise
-

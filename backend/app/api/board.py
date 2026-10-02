@@ -6,7 +6,11 @@ from typing import cast
 from fastapi import APIRouter, Depends
 
 from app.core.database import get_db
-from app.domain.schemas import BoardResponse, BoardUpdateRequest, StageLabelsUpdateRequest
+from app.domain.schemas import (
+    BoardResponse,
+    BoardUpdateRequest,
+    StageLabelsUpdateRequest,
+)
 from app.repositories.board_repository import BoardRepository
 from app.services.board_service import BoardService
 
@@ -75,4 +79,3 @@ def reset_board(conn: sqlite3.Connection = Depends(get_db)) -> dict[str, bool]:
     service = _service(conn)
     service.reset()
     return {"ok": True}
-

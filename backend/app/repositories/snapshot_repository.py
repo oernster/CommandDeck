@@ -107,10 +107,14 @@ class SnapshotRepository:
             (name, saved_at, payload_json, structural_hash),
         )
         self._conn.commit()
-        snapshot_id = int(self._conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        snapshot_id = int(
+            self._conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        )
         return {"id": snapshot_id, "name": name, "saved_at": saved_at}
 
-    def update_payload(self, *, snapshot_id: int, saved_at: int, payload_json: str) -> None:
+    def update_payload(
+        self, *, snapshot_id: int, saved_at: int, payload_json: str
+    ) -> None:
         self._conn.execute(
             "UPDATE snapshots SET saved_at = ?, payload_json = ? WHERE id = ?",
             (saved_at, payload_json, snapshot_id),
@@ -137,4 +141,3 @@ class SnapshotRepository:
         cur = self._conn.execute("DELETE FROM snapshots WHERE id = ?", (snapshot_id,))
         self._conn.commit()
         return cur.rowcount > 0
-

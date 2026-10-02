@@ -910,11 +910,15 @@ class InstallerWindow(QMainWindow):
                 except Exception as exc:
                     self._log(f"Failed to copy {s} -> {d}: {exc}")
 
-    def _delete_tree(self, root: Path, *, preserve_paths: set[Path] | None = None) -> None:
+    def _delete_tree(
+        self, root: Path, *, preserve_paths: set[Path] | None = None
+    ) -> None:
         if not root.exists():
             return
 
-        preserve = {p.resolve() for p in (preserve_paths or set()) if isinstance(p, Path)}
+        preserve = {
+            p.resolve() for p in (preserve_paths or set()) if isinstance(p, Path)
+        }
 
         for dirpath, dirnames, filenames in os.walk(root, topdown=False):
             base = Path(dirpath)
@@ -967,7 +971,9 @@ class InstallerWindow(QMainWindow):
             Path(str(db_path) + "-shm"),
         }
 
-    def _perform_uninstall(self, confirm: bool = True, *, wipe_data: bool = False) -> None:
+    def _perform_uninstall(
+        self, confirm: bool = True, *, wipe_data: bool = False
+    ) -> None:
         self._log("Starting uninstall...")
         self._stop_running_tray()
 
@@ -991,15 +997,12 @@ class InstallerWindow(QMainWindow):
                     "\n\nUser data will be deleted: the local database will be removed."
                 )
             else:
-                data_note = (
-                    "\n\nUser data will be kept: the local database will NOT be removed."
-                )
+                data_note = "\n\nUser data will be kept: the local database will NOT be removed."
             if not self._confirm(
                 "Confirm uninstall",
                 (
                     f"Are you sure you want to remove {APP_NAME} version "
-                    f"{installed_version} from:\n{self.install_dir}?"
-                    + data_note
+                    f"{installed_version} from:\n{self.install_dir}?" + data_note
                 ),
             ):
                 self._finish_progress("Uninstall cancelled")

@@ -102,4 +102,3 @@ def delete_snapshot(
     service = _service(conn)
     service.delete(snapshot_id=snapshot_id)
     return {"ok": True}
-

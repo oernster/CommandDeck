@@ -42,16 +42,14 @@ def test_init_db_upgrades_board_state_adds_stage_labels_json(tmp_path) -> None:
     conn.execute("PRAGMA foreign_keys = ON;")
     try:
         # Legacy v1.1.0-ish board_state (no stage_labels_json).
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE board_state (
               id INTEGER PRIMARY KEY CHECK (id = 1),
               name TEXT,
               user_named INTEGER NOT NULL DEFAULT 0,
               created_at INTEGER NOT NULL
             );
-            """.strip()
-        )
+            """.strip())
         conn.execute(
             "INSERT INTO board_state (id, name, user_named, created_at) VALUES (1, NULL, 0, 1)"
         )
@@ -66,13 +64,14 @@ def test_init_db_upgrades_board_state_adds_stage_labels_json(tmp_path) -> None:
 
 
 def test_init_db_upgrades_legacy_sessions_table_to_v2(tmp_path) -> None:
-    conn = sqlite3.connect(str(tmp_path / "sessions_legacy.db"), check_same_thread=False)
+    conn = sqlite3.connect(
+        str(tmp_path / "sessions_legacy.db"), check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     try:
         # Minimal schema pieces required for legacy sessions to exist.
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE commands (
               id INTEGER PRIMARY KEY,
               title TEXT NOT NULL,
@@ -80,18 +79,15 @@ def test_init_db_upgrades_legacy_sessions_table_to_v2(tmp_path) -> None:
               status TEXT NOT NULL,
               created_at INTEGER NOT NULL
             );
-            """.strip()
-        )
-        conn.execute(
-            """
+            """.strip())
+        conn.execute("""
             CREATE TABLE sessions (
               id INTEGER PRIMARY KEY,
               category TEXT NOT NULL,
               started_at INTEGER NOT NULL,
               ended_at INTEGER
             );
-            """.strip()
-        )
+            """.strip())
         conn.execute(
             "INSERT INTO sessions (id, category, started_at, ended_at) VALUES (1, 'Design', 1, NULL)"
         )

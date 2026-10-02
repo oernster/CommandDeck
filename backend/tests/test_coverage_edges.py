@@ -36,8 +36,7 @@ def test_ensure_sessions_v2_preserves_existing_sessions_legacy_suffix(tmp_path) 
 
     try:
         # Minimal commands table so init_db can proceed far enough.
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE commands (
               id INTEGER PRIMARY KEY,
               title TEXT NOT NULL,
@@ -46,19 +45,16 @@ def test_ensure_sessions_v2_preserves_existing_sessions_legacy_suffix(tmp_path) 
               sort_index INTEGER NOT NULL,
               created_at INTEGER NOT NULL
             );
-            """.strip()
-        )
+            """.strip())
         # Legacy sessions table missing v2 columns.
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE sessions (
               id INTEGER PRIMARY KEY,
               category TEXT NOT NULL,
               started_at INTEGER NOT NULL,
               ended_at INTEGER
             );
-            """.strip()
-        )
+            """.strip())
         # Pre-existing sessions_legacy forces the suffixed rename path.
         conn.execute("CREATE TABLE sessions_legacy (id INTEGER PRIMARY KEY);")
         conn.commit()
@@ -78,7 +74,9 @@ def test_ensure_sessions_v2_preserves_existing_sessions_legacy_suffix(tmp_path) 
         conn.close()
 
 
-def test_ensure_sessions_v2_preserve_loop_increments_past_existing_suffixes(tmp_path) -> None:
+def test_ensure_sessions_v2_preserve_loop_increments_past_existing_suffixes(
+    tmp_path,
+) -> None:
     """Exercise the `while _table_exists(..._i)` loop increment branch."""
 
     db_path = tmp_path / "suffix_loop.db"
@@ -87,8 +85,7 @@ def test_ensure_sessions_v2_preserve_loop_increments_past_existing_suffixes(tmp_
     conn.execute("PRAGMA foreign_keys = ON;")
 
     try:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE commands (
               id INTEGER PRIMARY KEY,
               title TEXT NOT NULL,
@@ -97,18 +94,15 @@ def test_ensure_sessions_v2_preserve_loop_increments_past_existing_suffixes(tmp_
               sort_index INTEGER NOT NULL,
               created_at INTEGER NOT NULL
             );
-            """.strip()
-        )
-        conn.execute(
-            """
+            """.strip())
+        conn.execute("""
             CREATE TABLE sessions (
               id INTEGER PRIMARY KEY,
               category TEXT NOT NULL,
               started_at INTEGER NOT NULL,
               ended_at INTEGER
             );
-            """.strip()
-        )
+            """.strip())
         conn.execute("CREATE TABLE sessions_legacy (id INTEGER PRIMARY KEY);")
         conn.execute("CREATE TABLE sessions_legacy_2 (id INTEGER PRIMARY KEY);")
         conn.commit()
@@ -142,7 +136,9 @@ def test_board_service_parses_valid_stage_labels_json(db_connection) -> None:
     assert out["stage_labels"] == {"DESIGN": "Plan"}
 
 
-def test_board_service_ignores_stage_labels_json_when_values_not_strings(db_connection) -> None:
+def test_board_service_ignores_stage_labels_json_when_values_not_strings(
+    db_connection,
+) -> None:
     """Cover the `isinstance(parsed, dict) and all(...)` false branch."""
 
     conn = db_connection
@@ -199,7 +195,9 @@ def test_snapshot_service_get_stage_label_falls_back_when_value_missing_or_blank
     assert svc._get_stage_label(StageId.DESIGN) == "Design"
 
 
-def test_snapshot_service_structural_form_active_session_and_invalid_commands_shape() -> None:
+def test_snapshot_service_structural_form_active_session_and_invalid_commands_shape() -> (
+    None
+):
     """Hit SnapshotService._structural_form() branches around sessions/commands parsing."""
 
     payload = {
@@ -258,10 +256,17 @@ def test_snapshot_service_structural_form_outcomes_skips_invalid_entries() -> No
     }
 
     structural = SnapshotService._structural_form(payload)
-    assert structural["outcomes"] == {"DESIGN": [["ok"]], "BUILD": [], "REVIEW": [], "COMPLETE": []}
+    assert structural["outcomes"] == {
+        "DESIGN": [["ok"]],
+        "BUILD": [],
+        "REVIEW": [],
+        "COMPLETE": [],
+    }
 
 
-def test_snapshot_service_structural_form_skips_non_dict_session_then_finds_active() -> None:
+def test_snapshot_service_structural_form_skips_non_dict_session_then_finds_active() -> (
+    None
+):
     """Cover session loop path where first element is non-dict then active session is found."""
 
     payload = {
@@ -295,7 +300,9 @@ def test_snapshot_service_structural_form_commands_list_skips_non_dict_items() -
     }
 
     structural = SnapshotService._structural_form(payload)
-    assert structural["commands"] == {"DESIGN": [{"title": "T1", "status": "Not Started"}]}
+    assert structural["commands"] == {
+        "DESIGN": [{"title": "T1", "status": "Not Started"}]
+    }
 
 
 def test_snapshot_service_structural_form_commands_not_dict_is_ignored() -> None:
@@ -314,7 +321,9 @@ def test_snapshot_service_structural_form_commands_not_dict_is_ignored() -> None
     assert structural["commands"] == {}
 
 
-def test_snapshot_apply_payload_validation_error_board_name_blank(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_board_name_blank(
+    db_connection,
+) -> None:
     """Cover snapshot payload validation branch for blank board_name."""
 
     service = _service(db_connection)
@@ -330,7 +339,9 @@ def test_snapshot_apply_payload_validation_error_board_name_blank(db_connection)
         )
 
 
-def test_snapshot_apply_payload_validation_error_sessions_wrong_type(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_sessions_wrong_type(
+    db_connection,
+) -> None:
     """Cover snapshot payload validation branch for sessions not list."""
 
     service = _service(db_connection)
@@ -362,7 +373,9 @@ def test_snapshot_apply_payload_outcomes_none_is_ok(db_connection) -> None:
     )
 
 
-def test_snapshot_apply_payload_outcomes_invalid_element_is_error(db_connection) -> None:
+def test_snapshot_apply_payload_outcomes_invalid_element_is_error(
+    db_connection,
+) -> None:
     """Cover `if not isinstance(o, dict)` branch in outcome insertion."""
 
     service = _service(db_connection)
@@ -384,7 +397,9 @@ def test_snapshot_apply_payload_outcomes_invalid_element_is_error(db_connection)
         )
 
 
-def test_snapshot_apply_payload_outcomes_missing_command_is_error(db_connection) -> None:
+def test_snapshot_apply_payload_outcomes_missing_command_is_error(
+    db_connection,
+) -> None:
     """Cover branch where an outcome references a missing command id."""
 
     service = _service(db_connection)
@@ -401,7 +416,9 @@ def test_snapshot_apply_payload_outcomes_missing_command_is_error(db_connection)
         )
 
 
-def test_snapshot_apply_payload_outcomes_missing_created_at_is_error(db_connection) -> None:
+def test_snapshot_apply_payload_outcomes_missing_created_at_is_error(
+    db_connection,
+) -> None:
     """Cover branch where outcome created_at is not an int."""
 
     service = _service(db_connection)
@@ -445,7 +462,9 @@ def test_snapshot_apply_payload_outcomes_missing_note_is_error(db_connection) ->
         )
 
 
-def test_snapshot_apply_payload_validation_error_outcomes_wrong_type(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_outcomes_wrong_type(
+    db_connection,
+) -> None:
     """Cover snapshot payload validation branch for outcomes not list."""
 
     service = _service(db_connection)
@@ -473,7 +492,9 @@ def test_snapshots_rename_validation_error_empty_string(client):
     assert r.status_code == 400
 
 
-def test_snapshot_apply_payload_validation_error_command_entry_not_dict(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_command_entry_not_dict(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -512,7 +533,9 @@ def test_snapshot_apply_payload_validation_error_status_invalid(db_connection) -
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_v2_success_inserts_commands_and_ignores_sessions(db_connection) -> None:
+def test_snapshot_apply_payload_v2_success_inserts_commands_and_ignores_sessions(
+    db_connection,
+) -> None:
     """Cover schema_version!=3 command insert path (v1/v2 compatibility)."""
 
     service = _service(db_connection)
@@ -528,7 +551,9 @@ def test_snapshot_apply_payload_v2_success_inserts_commands_and_ignores_sessions
         "sessions": [],
     }
     service._apply_payload(payload)
-    row = db_connection.execute("SELECT title, stage_id FROM commands ORDER BY id ASC").fetchone()
+    row = db_connection.execute(
+        "SELECT title, stage_id FROM commands ORDER BY id ASC"
+    ).fetchone()
     assert row is not None
     assert row["title"] == "Task A"
     assert row["stage_id"] == "DESIGN"
@@ -550,7 +575,9 @@ def test_snapshot_apply_payload_v2_unknown_stage_key_is_ignored(db_connection) -
     assert int(count) == 0
 
 
-def test_snapshot_apply_payload_validation_error_stage_items_none(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_stage_items_none(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -563,7 +590,9 @@ def test_snapshot_apply_payload_validation_error_stage_items_none(db_connection)
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_stage_items_not_list(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_stage_items_not_list(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -576,7 +605,9 @@ def test_snapshot_apply_payload_validation_error_stage_items_not_list(db_connect
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_entry_id_not_int(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_entry_id_not_int(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -589,7 +620,9 @@ def test_snapshot_apply_payload_validation_error_entry_id_not_int(db_connection)
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_session_command_id_not_int(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_session_command_id_not_int(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -609,7 +642,9 @@ def test_snapshot_apply_payload_validation_error_session_command_id_not_int(db_c
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_session_stage_id_invalid(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_session_stage_id_invalid(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -629,7 +664,9 @@ def test_snapshot_apply_payload_validation_error_session_stage_id_invalid(db_con
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_session_started_at_not_int(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_session_started_at_not_int(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -649,7 +686,9 @@ def test_snapshot_apply_payload_validation_error_session_started_at_not_int(db_c
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_session_ended_at_wrong_type(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_session_ended_at_wrong_type(
+    db_connection,
+) -> None:
     service = _service(db_connection)
     payload = {
         "schema_version": 3,
@@ -669,7 +708,9 @@ def test_snapshot_apply_payload_validation_error_session_ended_at_wrong_type(db_
         service._apply_payload(payload)
 
 
-def test_snapshot_apply_payload_validation_error_session_command_missing(db_connection) -> None:
+def test_snapshot_apply_payload_validation_error_session_command_missing(
+    db_connection,
+) -> None:
     """Cover the FK-safety check for session->command existence."""
 
     service = _service(db_connection)
@@ -723,4 +764,3 @@ def test_snapshot_apply_payload_inserts_ended_session_happy_path(db_connection) 
     assert row["stage_id"] == "DESIGN"
     assert row["started_at"] == 10
     assert row["ended_at"] == 20
-

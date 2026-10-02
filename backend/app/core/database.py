@@ -47,7 +47,9 @@ def _ensure_commands_stage_id(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE commands SET stage_id = 'DESIGN' WHERE stage_id = 'Design'")
     conn.execute("UPDATE commands SET stage_id = 'BUILD' WHERE stage_id = 'Build'")
     conn.execute("UPDATE commands SET stage_id = 'REVIEW' WHERE stage_id = 'Review'")
-    conn.execute("UPDATE commands SET stage_id = 'COMPLETE' WHERE stage_id = 'Complete'")
+    conn.execute(
+        "UPDATE commands SET stage_id = 'COMPLETE' WHERE stage_id = 'Complete'"
+    )
     conn.execute(
         "UPDATE commands SET stage_id = 'COMPLETE' WHERE stage_id IN ('Maintain','Recover')"
     )
@@ -148,8 +150,7 @@ def _ensure_board_state(conn: sqlite3.Connection) -> None:
     - `created_at` is used to infer first-run behavior for autofocus/cue
     """
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS board_state (
           id INTEGER PRIMARY KEY CHECK (id = 1),
           name TEXT,
@@ -157,8 +158,7 @@ def _ensure_board_state(conn: sqlite3.Connection) -> None:
           stage_labels_json TEXT,
           created_at INTEGER NOT NULL
         );
-        """.strip()
-    )
+        """.strip())
 
     # v2: stage label overrides are persisted per board.
     if not _table_has_column(conn, table="board_state", column="stage_labels_json"):
@@ -183,8 +183,7 @@ def _ensure_sessions_v2(conn: sqlite3.Connection) -> None:
     """
 
     if not _table_exists(conn, table="sessions"):
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE sessions (
               id INTEGER PRIMARY KEY,
               command_id INTEGER NOT NULL,
@@ -193,8 +192,7 @@ def _ensure_sessions_v2(conn: sqlite3.Connection) -> None:
               ended_at INTEGER,
               FOREIGN KEY(command_id) REFERENCES commands(id) ON DELETE CASCADE
             );
-            """.strip()
-        )
+            """.strip())
         conn.commit()
     else:
         # If the existing sessions table lacks required v2 columns, preserve it
@@ -218,8 +216,7 @@ def _ensure_sessions_v2(conn: sqlite3.Connection) -> None:
             conn.commit()
 
             # Create the new v2 table.
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS sessions (
                   id INTEGER PRIMARY KEY,
                   command_id INTEGER NOT NULL,
@@ -228,8 +225,7 @@ def _ensure_sessions_v2(conn: sqlite3.Connection) -> None:
                   ended_at INTEGER,
                   FOREIGN KEY(command_id) REFERENCES commands(id) ON DELETE CASCADE
                 );
-                """.strip()
-            )
+                """.strip())
             conn.commit()
 
         # Deterministic no-op branch for coverage: when sessions table already
@@ -256,8 +252,7 @@ def _ensure_snapshots(conn: sqlite3.Connection) -> None:
     dedupe.
     """
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS snapshots (
           id INTEGER PRIMARY KEY,
           name TEXT NOT NULL,
@@ -265,8 +260,7 @@ def _ensure_snapshots(conn: sqlite3.Connection) -> None:
           payload_json TEXT NOT NULL,
           structural_hash TEXT NOT NULL
         );
-        """.strip()
-    )
+        """.strip())
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_snapshots_saved_at ON snapshots(saved_at DESC, id DESC);"
     )

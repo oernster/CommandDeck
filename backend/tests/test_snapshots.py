@@ -193,7 +193,7 @@ def test_snapshot_repository_upsert_by_name_hash_inserts_and_updates(db_connecti
         name="N",
         structural_hash="h",
         saved_at=2,
-        payload_json="{\"x\":1}",
+        payload_json='{"x":1}',
     )
     assert out2["id"] == out1["id"]
     assert out2["saved_at"] == 2
@@ -235,7 +235,9 @@ def test_rename_snapshot_404_when_missing(client):
     assert r.status_code == 404
 
 
-def test_snapshot_default_name_uses_stage_label_and_handles_invalid_labels_json(client, db_connection):
+def test_snapshot_default_name_uses_stage_label_and_handles_invalid_labels_json(
+    client, db_connection
+):
     # Create a command and start a session (so stage is known).
     r1 = client.post(
         "/api/commands",
@@ -369,8 +371,18 @@ def test_snapshot_apply_payload_keeps_first_active_session_when_multiple(db_conn
         {"schema_version": 1, "board_name": "", "commands": {}, "sessions": []},
         {"schema_version": 1, "board_name": "X", "commands": [], "sessions": []},
         {"schema_version": 1, "board_name": "X", "commands": {}, "sessions": {}},
-        {"schema_version": 1, "board_name": "X", "commands": {"Design": "oops"}, "sessions": []},
-        {"schema_version": 1, "board_name": "X", "commands": {"Design": [1]}, "sessions": []},
+        {
+            "schema_version": 1,
+            "board_name": "X",
+            "commands": {"Design": "oops"},
+            "sessions": [],
+        },
+        {
+            "schema_version": 1,
+            "board_name": "X",
+            "commands": {"Design": [1]},
+            "sessions": [],
+        },
         {
             "schema_version": 1,
             "board_name": "X",
@@ -383,25 +395,48 @@ def test_snapshot_apply_payload_keeps_first_active_session_when_multiple(db_conn
             "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"command_id": "oops", "stage_id": "DESIGN", "started_at": 1, "ended_at": None}],
+            "sessions": [
+                {
+                    "command_id": "oops",
+                    "stage_id": "DESIGN",
+                    "started_at": 1,
+                    "ended_at": None,
+                }
+            ],
         },
         {
             "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"command_id": 1, "stage_id": "NOPE", "started_at": 1, "ended_at": None}],
+            "sessions": [
+                {"command_id": 1, "stage_id": "NOPE", "started_at": 1, "ended_at": None}
+            ],
         },
         {
             "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"command_id": 1, "stage_id": "DESIGN", "started_at": "1", "ended_at": None}],
+            "sessions": [
+                {
+                    "command_id": 1,
+                    "stage_id": "DESIGN",
+                    "started_at": "1",
+                    "ended_at": None,
+                }
+            ],
         },
         {
             "schema_version": 2,
             "board_name": "X",
             "commands": {},
-            "sessions": [{"command_id": 1, "stage_id": "DESIGN", "started_at": 1, "ended_at": "2"}],
+            "sessions": [
+                {
+                    "command_id": 1,
+                    "stage_id": "DESIGN",
+                    "started_at": 1,
+                    "ended_at": "2",
+                }
+            ],
         },
     ],
 )
@@ -596,4 +631,3 @@ def test_snapshot_load_overwrites_commands_and_sessions_and_restores_outcomes(cl
     assert active.status_code == 200
     assert active.json().get("active", True) is not False
     assert active.json()["stage_id"] == "DESIGN"
-
