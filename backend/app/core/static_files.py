@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 
 def _runtime_root_dir() -> Path:
@@ -75,7 +77,7 @@ class AssetsStaticFiles(StaticFiles):
 
     _CACHE_CONTROL_VALUE = "public, max-age=31536000, immutable"
 
-    async def get_response(self, path: str, scope):  # type: ignore[override]
+    async def get_response(self, path: str, scope: Scope) -> Response:
         response = await super().get_response(path, scope)
         # Override any default Cache-Control set by Starlette.
         #

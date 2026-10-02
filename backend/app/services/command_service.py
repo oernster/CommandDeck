@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from collections.abc import Callable
 
 from app.domain.enums import StageId, Status
@@ -68,7 +69,7 @@ class CommandService:
     def delete(self, command_id: int) -> bool:
         return self._repo.delete(command_id)
 
-    def reorder(self, by_stage_id: dict[StageId, list[int]]) -> None:
+    def reorder(self, by_stage_id: dict[StageId, builtins.list[int]]) -> None:
         # Basic validation - full coverage per stage is enforced in the repo.
         for stage_id, ids in by_stage_id.items():
             if not ids:

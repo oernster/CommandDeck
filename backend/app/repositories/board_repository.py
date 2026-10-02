@@ -11,7 +11,8 @@ class BoardRepository:
 
     def get(self) -> dict[str, object]:
         row = self._conn.execute(
-            "SELECT name, user_named, stage_labels_json, created_at FROM board_state WHERE id = 1"
+            "SELECT name, user_named, stage_labels_json, created_at FROM board_state "
+            "WHERE id = 1"
         ).fetchone()
         if row is None:
             # Should not happen because schema ensure initializes row; fail loudly.
@@ -45,8 +46,8 @@ class BoardRepository:
     def reset_live_state(self) -> None:
         """Clear operational state for the single live board.
 
-        Deletes outcomes, sessions and commands, but preserves the singleton
-        `board_state` row, stage label overrides, and saved snapshots.
+        Deletes outcomes, sessions and commands. Preserves the singleton
+        `board_state` row, stage label overrides and saved snapshots.
         """
 
         self._conn.execute("BEGIN")

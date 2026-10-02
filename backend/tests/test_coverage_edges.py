@@ -195,10 +195,9 @@ def test_snapshot_service_get_stage_label_falls_back_when_value_missing_or_blank
     assert svc._get_stage_label(StageId.DESIGN) == "Design"
 
 
-def test_snapshot_service_structural_form_active_session_and_invalid_commands_shape() -> (
-    None
-):
-    """Hit SnapshotService._structural_form() branches around sessions/commands parsing."""
+def test_structural_form_active_session_and_invalid_commands_shape() -> None:
+    """Hit SnapshotService._structural_form() branches around the parsing of
+    sessions and commands."""
 
     payload = {
         "schema_version": 4,
@@ -218,7 +217,7 @@ def test_snapshot_service_structural_form_active_session_and_invalid_commands_sh
     assert structural["commands"] == {}
 
 
-def test_snapshot_service_structural_form_empty_sessions_and_empty_commands() -> None:
+def test_structural_form_empty_sessions_and_empty_commands() -> None:
     """Cover the `if not sessions: pass` + `if not commands: pass` branches."""
 
     payload = {
@@ -233,7 +232,7 @@ def test_snapshot_service_structural_form_empty_sessions_and_empty_commands() ->
     assert structural["commands"] == {}
 
 
-def test_snapshot_service_structural_form_outcomes_skips_invalid_entries() -> None:
+def test_structural_form_outcomes_skips_invalid_entries() -> None:
     """Cover outcome parsing branches in SnapshotService._structural_form()."""
 
     payload = {
@@ -264,10 +263,36 @@ def test_snapshot_service_structural_form_outcomes_skips_invalid_entries() -> No
     }
 
 
-def test_snapshot_service_structural_form_skips_non_dict_session_then_finds_active() -> (
-    None
-):
-    """Cover session loop path where first element is non-dict then active session is found."""
+def test_structural_form_ignores_outcomes_that_are_not_a_list() -> None:
+    """A malformed payload whose outcomes is present but not a list carries no
+    notes into the structural form, rather than failing the dedupe."""
+
+    payload = {
+        "schema_version": 4,
+        "board_name": "Board",
+        "saved_at": 123,
+        "commands": {
+            "DESIGN": [{"id": 1, "title": "T1", "status": "Not Started"}],
+            "BUILD": [],
+            "REVIEW": [],
+            "COMPLETE": [],
+        },
+        "sessions": [],
+        "outcomes": {"command_id": 1, "note": "ok"},
+    }
+
+    structural = SnapshotService._structural_form(payload)
+    assert structural["outcomes"] == {
+        "DESIGN": [[]],
+        "BUILD": [],
+        "REVIEW": [],
+        "COMPLETE": [],
+    }
+
+
+def test_structural_form_skips_non_dict_session_then_finds_active() -> None:
+    """Cover the session loop path where the first element is not a dict and
+    an active session is found after it."""
 
     payload = {
         "schema_version": 4,
@@ -283,7 +308,7 @@ def test_snapshot_service_structural_form_skips_non_dict_session_then_finds_acti
     assert structural["active_session_stage_id"] == "BUILD"
 
 
-def test_snapshot_service_structural_form_commands_list_skips_non_dict_items() -> None:
+def test_structural_form_commands_list_skips_non_dict_items() -> None:
     """Cover the `if not isinstance(it, dict): continue` branch."""
 
     payload = {
@@ -305,7 +330,7 @@ def test_snapshot_service_structural_form_commands_list_skips_non_dict_items() -
     }
 
 
-def test_snapshot_service_structural_form_commands_not_dict_is_ignored() -> None:
+def test_structural_form_commands_not_dict_is_ignored() -> None:
     """Cover the `if isinstance(commands, dict)` false branch."""
 
     payload = {

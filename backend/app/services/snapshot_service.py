@@ -175,7 +175,8 @@ class SnapshotService:
 
         # Sessions: include full list (newest-first) so we can restore timing.
         srows = self._conn.execute(
-            "SELECT command_id, stage_id, started_at, ended_at FROM sessions ORDER BY started_at DESC, id DESC"
+            "SELECT command_id, stage_id, started_at, ended_at FROM sessions ORDER BY "
+            "started_at DESC, id DESC"
         ).fetchall()
         sessions = [
             {
@@ -189,7 +190,8 @@ class SnapshotService:
 
         # Outcomes: include full history so panes can be restored on snapshot load.
         orows = self._conn.execute(
-            "SELECT command_id, note, created_at FROM outcomes ORDER BY created_at DESC, id DESC"
+            "SELECT command_id, note, created_at FROM outcomes ORDER BY created_at "
+            "DESC, id DESC"
         ).fetchall()
         outcomes = [
             {
@@ -377,7 +379,8 @@ class SnapshotService:
                         if not isinstance(cmd_id, int):
                             raise ValueError("Invalid snapshot payload")
                         self._conn.execute(
-                            "INSERT INTO commands (id, title, stage_id, status, sort_index, created_at) "
+                            "INSERT INTO commands (id, title, stage_id, status, "
+                            "sort_index, created_at) "
                             "VALUES (?, ?, ?, ?, ?, ?)",
                             (
                                 cmd_id,
@@ -391,7 +394,8 @@ class SnapshotService:
                     else:
                         # v1/v2: ids were not preserved.
                         self._conn.execute(
-                            "INSERT INTO commands (title, stage_id, status, sort_index, created_at) "
+                            "INSERT INTO commands (title, stage_id, status, "
+                            "sort_index, created_at) "
                             "VALUES (?, ?, ?, ?, ?)",
                             (
                                 title,
@@ -427,7 +431,8 @@ class SnapshotService:
                     raise ValueError("Invalid snapshot payload")
                 if ended_at is None:
                     if active_seen:
-                        # Keep deterministic behavior: only the first active session wins.
+                        # Keep deterministic behavior: only the first active
+                        # session wins.
                         continue
                     active_seen = True
 
@@ -441,7 +446,8 @@ class SnapshotService:
                     raise ValueError("Invalid snapshot payload")
 
                 self._conn.execute(
-                    "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO sessions (command_id, stage_id, started_at, "
+                    "ended_at) VALUES (?, ?, ?, ?)",
                     (command_id, stage_id_str, started_at, ended_at),
                 )
 
@@ -467,7 +473,8 @@ class SnapshotService:
                         raise ValueError("Invalid snapshot payload")
 
                     self._conn.execute(
-                        "INSERT INTO outcomes (command_id, note, created_at) VALUES (?, ?, ?)",
+                        "INSERT INTO outcomes (command_id, note, created_at) VALUES "
+                        "(?, ?, ?)",
                         (int(cid), note, int(created_at)),
                     )
 

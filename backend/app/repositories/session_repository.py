@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import sqlite3
 
 from app.domain.enums import StageId
@@ -42,7 +43,7 @@ class SessionRepository:
             return None
         return self._row_to_session(row)
 
-    def latest_by_stage_id(self) -> list[Session]:
+    def latest_by_stage_id(self) -> builtins.list[Session]:
         """Return the latest session per stage.
 
         Note: SQLite doesn't have a great portable DISTINCT ON equivalent. This

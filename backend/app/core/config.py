@@ -8,10 +8,10 @@ import sys
 def _repo_root() -> str:
     # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> repo
     here = __file__
-    core_dir = __import__("os").path.dirname(__import__("os").path.abspath(here))
-    app_dir = __import__("os").path.dirname(core_dir)
-    backend_dir = __import__("os").path.dirname(app_dir)
-    repo_root = __import__("os").path.dirname(backend_dir)
+    core_dir = os.path.dirname(os.path.abspath(here))
+    app_dir = os.path.dirname(core_dir)
+    backend_dir = os.path.dirname(app_dir)
+    repo_root = os.path.dirname(backend_dir)
     return repo_root
 
 

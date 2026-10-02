@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import sqlite3
 
 from app.domain.enums import StageId, Status
@@ -63,7 +64,7 @@ class CommandRepository:
         self._conn.commit()
 
         # `Cursor.lastrowid` is typed as Optional[int]; in practice SQLite always
-        # provides this for successful inserts, but we avoid a defensive branch
+        # provides this for successful inserts. We avoid a defensive branch
         # (which is hard to reproduce without mocking).
         command_id = int(self._conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         return Command(
@@ -159,7 +160,7 @@ class CommandRepository:
         self._conn.commit()
         return cur.rowcount > 0
 
-    def reorder(self, by_stage_id: dict[StageId, list[int]]) -> None:
+    def reorder(self, by_stage_id: dict[StageId, builtins.list[int]]) -> None:
         """Persist a complete ordering for one or more stages.
 
         Expects each category list to contain every existing command id for that
@@ -169,7 +170,7 @@ class CommandRepository:
         self._conn.execute("BEGIN")
         try:
             # Validate that the payload includes each command exactly once across
-            # the involved categories, and that it matches the current DB coverage
+            # the involved categories; also that it matches the current DB coverage
             # for those categories.
             payload_ids: list[int] = []
             for ids in by_stage_id.values():

@@ -40,7 +40,8 @@ def _ensure_commands_stage_id(conn: sqlite3.Connection) -> None:
     if _table_has_column(conn, table="commands", column="category"):
         # Backfill stable IDs from legacy display labels.
         conn.execute(
-            "UPDATE commands SET stage_id = category WHERE stage_id IS NULL OR stage_id = ''"
+            "UPDATE commands SET stage_id = category WHERE stage_id IS NULL OR "
+            "stage_id = ''"
         )
 
     # Normalize to stable IDs.
@@ -51,12 +52,14 @@ def _ensure_commands_stage_id(conn: sqlite3.Connection) -> None:
         "UPDATE commands SET stage_id = 'COMPLETE' WHERE stage_id = 'Complete'"
     )
     conn.execute(
-        "UPDATE commands SET stage_id = 'COMPLETE' WHERE stage_id IN ('Maintain','Recover')"
+        "UPDATE commands SET stage_id = 'COMPLETE' WHERE stage_id IN "
+        "('Maintain','Recover')"
     )
 
     # Final fallback to keep API validation deterministic.
     conn.execute(
-        "UPDATE commands SET stage_id = 'DESIGN' WHERE stage_id IS NULL OR stage_id = ''"
+        "UPDATE commands SET stage_id = 'DESIGN' WHERE stage_id IS NULL OR stage_id = "
+        "''"
     )
     conn.commit()
 
@@ -141,7 +144,7 @@ def _ensure_board_state(conn: sqlite3.Connection) -> None:
     """Ensure the singleton `board_state` table exists and is initialized.
 
     v1.1.0 introduces a board name field. The board remains "live" (no new-board
-    workflow), but we persist the user's chosen name.
+    workflow); we persist the user's chosen name.
 
     Schema rules:
     - Single row only (id=1)
@@ -168,7 +171,8 @@ def _ensure_board_state(conn: sqlite3.Connection) -> None:
     row = conn.execute("SELECT id FROM board_state WHERE id = 1").fetchone()
     if row is None:
         conn.execute(
-            "INSERT INTO board_state (id, name, user_named, stage_labels_json, created_at) "
+            "INSERT INTO board_state (id, name, user_named, stage_labels_json, "
+            "created_at) "
             "VALUES (1, NULL, 0, NULL, strftime('%s','now'))"
         )
         conn.commit()
@@ -262,10 +266,12 @@ def _ensure_snapshots(conn: sqlite3.Connection) -> None:
         );
         """.strip())
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_snapshots_saved_at ON snapshots(saved_at DESC, id DESC);"
+        "CREATE INDEX IF NOT EXISTS idx_snapshots_saved_at ON snapshots(saved_at "
+        "DESC, id DESC);"
     )
     conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS ux_snapshots_name_hash ON snapshots(name, structural_hash);"
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_snapshots_name_hash ON snapshots(name, "
+        "structural_hash);"
     )
     conn.commit()
 

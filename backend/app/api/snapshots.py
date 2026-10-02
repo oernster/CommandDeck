@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import cast
 
 from fastapi import APIRouter, Depends
 
@@ -37,9 +36,9 @@ def list_snapshots(conn: sqlite3.Connection = Depends(get_db)) -> list[SnapshotS
     items = service.list()
     return [
         SnapshotSummary(
-            id=cast(int, s["id"]),
-            name=cast(str, s["name"]),
-            saved_at=epoch_seconds_to_iso8601_z(cast(int, s["saved_at"])),
+            id=s["id"],
+            name=s["name"],
+            saved_at=epoch_seconds_to_iso8601_z(s["saved_at"]),
         )
         for s in items
     ]
@@ -54,9 +53,9 @@ def save_snapshot(
     name = payload.name if payload is not None else None
     out = service.save_now(name=name)
     return SnapshotSummary(
-        id=cast(int, out["id"]),
-        name=cast(str, out["name"]),
-        saved_at=epoch_seconds_to_iso8601_z(cast(int, out["saved_at"])),
+        id=out["id"],
+        name=out["name"],
+        saved_at=epoch_seconds_to_iso8601_z(out["saved_at"]),
     )
 
 
@@ -88,9 +87,9 @@ def rename_snapshot(
     row = repo.get_summary(snapshot_id)
     assert row is not None
     return SnapshotSummary(
-        id=cast(int, row["id"]),
-        name=cast(str, row["name"]),
-        saved_at=epoch_seconds_to_iso8601_z(cast(int, row["saved_at"])),
+        id=row["id"],
+        name=row["name"],
+        saved_at=epoch_seconds_to_iso8601_z(row["saved_at"]),
     )
 
 

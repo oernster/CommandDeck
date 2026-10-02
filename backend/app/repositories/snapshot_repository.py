@@ -25,7 +25,8 @@ class SnapshotRepository:
 
     def get_payload(self, snapshot_id: int) -> dict[str, object] | None:
         row = self._conn.execute(
-            "SELECT id, name, saved_at, payload_json, structural_hash FROM snapshots WHERE id = ?",
+            "SELECT id, name, saved_at, payload_json, structural_hash FROM snapshots "
+            "WHERE id = ?",
             (snapshot_id,),
         ).fetchone()
         if row is None:
@@ -63,7 +64,8 @@ class SnapshotRepository:
             ).fetchone()
             if existing is None:
                 self._conn.execute(
-                    "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO snapshots (name, saved_at, payload_json, "
+                    "structural_hash) VALUES (?, ?, ?, ?)",
                     (name, saved_at, payload_json, structural_hash),
                 )
                 snapshot_id = int(
@@ -87,7 +89,8 @@ class SnapshotRepository:
         self, structural_hash: str
     ) -> SnapshotSummaryRow | None:
         row = self._conn.execute(
-            "SELECT id, name, saved_at FROM snapshots WHERE structural_hash = ? ORDER BY saved_at DESC, id DESC LIMIT 1",
+            "SELECT id, name, saved_at FROM snapshots WHERE structural_hash = ? ORDER "
+            "BY saved_at DESC, id DESC LIMIT 1",
             (structural_hash,),
         ).fetchone()
         if row is None:
@@ -103,7 +106,8 @@ class SnapshotRepository:
         payload_json: str,
     ) -> SnapshotSummaryRow:
         self._conn.execute(
-            "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) VALUES (?, ?, ?, ?)",
+            "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) "
+            "VALUES (?, ?, ?, ?)",
             (name, saved_at, payload_json, structural_hash),
         )
         self._conn.commit()

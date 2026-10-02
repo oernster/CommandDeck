@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.api.commands import router as commands_router
 from app.api.board import router as board_router
@@ -66,7 +66,9 @@ def create_app() -> FastAPI:
     app.include_router(snapshots_router)
 
     @app.middleware("http")
-    async def _api_cache_control(request: Request, call_next):
+    async def _api_cache_control(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         """Prevent caching for API responses only.
 
         Static caching behavior for the frontend is handled at the relevant

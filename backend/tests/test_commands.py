@@ -234,7 +234,7 @@ def test_create_command_rejects_duplicate_title_case_insensitive(client) -> None
 
 
 def test_update_command_rejects_duplicate_title(client) -> None:
-    c1 = client.post(
+    client.post(
         "/api/commands",
         json={"title": "One", "stage_id": "DESIGN"},
     ).json()
@@ -323,7 +323,7 @@ def test_reorder_commands_empty_payload_is_ok(client) -> None:
 
 
 def test_list_commands_is_ordered_within_stage(client) -> None:
-    # BUILD will come before DESIGN due to stage_id ordering in SQL, but we mainly
+    # BUILD will come before DESIGN due to stage_id ordering in SQL; we mainly
     # assert the within-stage order is stable and respects sort_index.
     d1 = client.post("/api/commands", json={"title": "D1", "stage_id": "DESIGN"}).json()
     d2 = client.post("/api/commands", json={"title": "D2", "stage_id": "DESIGN"}).json()

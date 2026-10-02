@@ -51,7 +51,8 @@ def test_init_db_upgrades_board_state_adds_stage_labels_json(tmp_path) -> None:
             );
             """.strip())
         conn.execute(
-            "INSERT INTO board_state (id, name, user_named, created_at) VALUES (1, NULL, 0, 1)"
+            "INSERT INTO board_state (id, name, user_named, created_at) VALUES (1, "
+            "NULL, 0, 1)"
         )
         conn.commit()
 
@@ -89,7 +90,8 @@ def test_init_db_upgrades_legacy_sessions_table_to_v2(tmp_path) -> None:
             );
             """.strip())
         conn.execute(
-            "INSERT INTO sessions (id, category, started_at, ended_at) VALUES (1, 'Design', 1, NULL)"
+            "INSERT INTO sessions (id, category, started_at, ended_at) VALUES (1, "
+            "'Design', 1, NULL)"
         )
         conn.commit()
 
@@ -347,11 +349,13 @@ def test_session_repository_defensive_stage_corruption_raises(tmp_path) -> None:
 
     # Need a valid command_id due to FK.
     conn.execute(
-        "INSERT INTO commands (id, title, stage_id, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO commands (id, title, stage_id, status, sort_index, created_at) "
+        "VALUES (?,?,?,?,?,?)",
         (1, "X", "DESIGN", "Not Started", 1, 1),
     )
     conn.execute(
-        "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) VALUES (?, ?, ?, NULL)",
+        "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) VALUES (?, "
+        "?, ?, NULL)",
         (1, "NOPE", 1),
     )
     conn.commit()
@@ -382,11 +386,13 @@ def test_session_repository_start_rolls_back_on_insert_failure(tmp_path) -> None
 
     # Seed an active session.
     conn.execute(
-        "INSERT INTO commands (id, title, stage_id, status, sort_index, created_at) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO commands (id, title, stage_id, status, sort_index, created_at) "
+        "VALUES (?,?,?,?,?,?)",
         (1, "X", "DESIGN", "Not Started", 1, 1),
     )
     conn.execute(
-        "INSERT INTO sessions (id, command_id, stage_id, started_at, ended_at) VALUES (?, ?, ?, ?, NULL)",
+        "INSERT INTO sessions (id, command_id, stage_id, started_at, ended_at) "
+        "VALUES (?, ?, ?, ?, NULL)",
         (1, 1, "DESIGN", 1),
     )
     conn.commit()

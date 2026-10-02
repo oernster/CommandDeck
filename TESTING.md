@@ -21,26 +21,18 @@ the coverage measurement over the backend application and the 100% floor, by
 line AND branch. mypy runs in strict mode, set in `pyproject.toml`. There is no
 CI, so run all four and read the exit code of each.
 
-**A full run takes about twenty seconds.** Measured on 2026-10-02: 180 tests
-passed in 22 seconds on Windows.
+**All four pass.** Measured on 2026-10-02: black and flake8 clean, mypy clean
+in strict mode over 35 files, 181 tests passed at 100% line and branch
+coverage in 20 seconds on Windows.
 
 **Read the exit code, never the text.** The run prints the coverage table then
 one summary line. That line reads "passed" even when the coverage floor
-has failed the run. `0` means the tests passed AND the floor was met.
+has failed the run, which is the case worth knowing: every test can pass while
+the run fails. `0` means the tests passed AND the floor was met.
 
-## The gate does not currently pass
-
-Measured on 2026-10-02, before any change to the backend:
-
-| Gate | State |
-|---|---|
-| black | passes |
-| flake8 | 5 lines over 88 columns, all long SQL strings in `backend/tests/test_database.py` and `backend/tests/test_snapshots.py` |
-| mypy | 20 errors in 8 files; 9 are redundant casts in `backend/app/api/snapshots.py`, the rest missing or invalid annotations |
-| pytest | all 180 tests pass; coverage is 99.94%, one branch short: `backend/app/services/snapshot_service.py` line 256 to 266 is never taken |
-
-So `pytest` exits non-zero on the floor alone, as do flake8 and mypy. A result
-from any of the four is only news when it differs from this table.
+**Long SQL is split, not exempted.** flake8 holds every line to 88 columns,
+string literals included. A long statement is written as adjacent literals,
+which Python joins into one string, rather than excused with a `noqa`.
 
 ## What the suite holds and leaves out
 

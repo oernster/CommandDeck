@@ -153,7 +153,8 @@ def test_snapshot_repository_exists_true_after_insert(db_connection):
     repo = SnapshotRepository(db_connection)
     assert repo.exists(1) is False
     db_connection.execute(
-        "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) VALUES (?, ?, ?, ?)",
+        "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) "
+        "VALUES (?, ?, ?, ?)",
         ("X", 1, "{}", "h"),
     )
     db_connection.commit()
@@ -283,7 +284,8 @@ def test_snapshot_invalid_payload_rejected(client, db_connection):
     # Call the service directly so we can assert the validation error without
     # TestClient re-raising server exceptions.
     db_connection.execute(
-        "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) VALUES (?, ?, ?, ?)",
+        "INSERT INTO snapshots (name, saved_at, payload_json, structural_hash) "
+        "VALUES (?, ?, ?, ?)",
         ("Bad", 1, "{}", "deadbeef"),
     )
     db_connection.commit()
@@ -302,7 +304,8 @@ def test_snapshot_invalid_payload_rejected(client, db_connection):
 def test_snapshot_apply_payload_rolls_back_on_mid_transaction_error(db_connection):
     # Seed state to verify rollback restores.
     db_connection.execute(
-        "INSERT INTO commands (title, stage_id, status, sort_index, created_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO commands (title, stage_id, status, sort_index, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
         ("Keep", "DESIGN", "Not Started", 1, 1),
     )
     cmd_id = int(db_connection.execute("SELECT last_insert_rowid()").fetchone()[0])
@@ -311,7 +314,8 @@ def test_snapshot_apply_payload_rolls_back_on_mid_transaction_error(db_connectio
         (cmd_id, "note", 1),
     )
     db_connection.execute(
-        "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) VALUES (?, ?, ?, NULL)",
+        "INSERT INTO sessions (command_id, stage_id, started_at, ended_at) "
+        "VALUES (?, ?, ?, NULL)",
         (cmd_id, "DESIGN", 1),
     )
     db_connection.commit()
