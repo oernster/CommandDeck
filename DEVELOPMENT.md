@@ -1,8 +1,8 @@
-# Command Deck — Developer Guide
+# Command Deck: Development
 
-This guide is for contributors and developers building/running Command Deck from source, running tests/quality gates, or producing Windows release artifacts.
+How to run Command Deck from source and produce the Windows release artifacts.
 
-User-facing overview lives in [`README.md`](README.md). Runtime architecture and code map lives in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+User-facing overview lives in [`README.md`](README.md). Runtime architecture and code map lives in [`ARCHITECTURE.md`](ARCHITECTURE.md). The tests and quality gates live in [`TESTING.md`](TESTING.md).
 
 ---
 
@@ -97,38 +97,17 @@ Defaults:
 
 Override:
 
-- `COMMANDDECK_SQLITE_PATH` — override the SQLite DB file path
+- `COMMANDDECK_SQLITE_PATH`: override the SQLite DB file path
 
 Related runtime/testing variable:
 
-- `COMMANDDECK_FRONTEND_DIST_DIR` — override the production frontend dist directory used for static serving (primarily for tests). See [`frontend_dist_dir()`](backend/app/core/static_files.py:27).
+- `COMMANDDECK_FRONTEND_DIST_DIR`: override the production frontend dist directory used for static serving (primarily for tests). See [`frontend_dist_dir()`](backend/app/core/static_files.py:27).
 
 ---
 
-## Tests (backend)
+## Tests and quality gates
 
-Backend tests are full-stack (API → services → repositories → real SQLite) and enforce **100% coverage** via [`pyproject.toml`](pyproject.toml:1).
-
-From the repo root:
-
-```powershell
-./venv/Scripts/Activate.ps1
-pytest -v --cov
-```
-
----
-
-## Quality gates (backend)
-
-From the repo root:
-
-```powershell
-./venv/Scripts/Activate.ps1
-python -m black --check backend
-python -m flake8 backend
-python -m mypy backend/app
-python -m pytest -q
-```
+The four gates (black, flake8, mypy and the coverage-gated suite), how to read them and their current state are in [`TESTING.md`](TESTING.md).
 
 ---
 
@@ -171,7 +150,7 @@ Single source of truth for versioning:
 
 ### Build-time environment variables
 
-- `COMMANDDECK_DEBUG_CONSOLE` — when truthy (`1/true/yes/on`), the runtime build uses an attached console window. See [`build_runtime()`](buildruntime.py:62).
+- `COMMANDDECK_DEBUG_CONSOLE`: when truthy (`1/true/yes/on`), the runtime build uses an attached console window. See [`build_runtime()`](buildexe.py:62).
 
 ### 1) One-time environment setup
 
@@ -204,14 +183,14 @@ Build:
 
 ```powershell
 ./venv/Scripts/Activate.ps1
-python buildruntime.py
+python buildexe.py
 ```
 
 Output:
 
 - `CommandDeck.exe`
 
-The packaged runtime entrypoint is [`backend/runtime_entry.py`](backend/runtime_entry.py:1) (starts the backend in-process, enforces single-instance on Windows, self-heals missing `frontend/dist`, and hosts the tray).
+The packaged runtime entrypoint is [`backend/runtime_entry.py`](backend/runtime_entry.py:1) (starts the backend in-process, enforces single-instance on Windows, self-heals missing `frontend/dist` and hosts the tray).
 
 ### 4) Build the GUI installer (CommandDeckInstaller.exe)
 
@@ -248,3 +227,7 @@ Installer behavior:
 - **Uninstall**: preserves the database by default.
   - To wipe user data, use the **"On uninstall, also delete my database"** checkbox.
 
+---
+
+See also [README.md](README.md), [ARCHITECTURE.md](ARCHITECTURE.md) and
+[TESTING.md](TESTING.md).

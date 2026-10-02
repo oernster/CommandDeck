@@ -1,10 +1,10 @@
-# Command Deck — Runtime Architecture (current)
+# Command Deck: Runtime Architecture (current)
 
 This document describes the **implemented runtime architecture** as it exists in the repository.
 
 Scope: FastAPI backend + React frontend + tray launcher + packaged runtime behavior.
 
-Build instructions, packaging steps, and developer workflows live in [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md).
+Build instructions, packaging steps and developer workflows live in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 Principles: local-first, minimal surface area, deterministic behaviour, explicit operations.
 
@@ -173,7 +173,7 @@ Primary UI feature:
 
 Frontend state model (deliberately small):
 
-- Load commands, board state, and session state on mount, then refetch after mutations (see [`refresh()`](frontend/src/features/commands/Board.tsx:118)).
+- Load commands, board state and session state on mount, then refetch after mutations (see [`refresh()`](frontend/src/features/commands/Board.tsx:118)).
 - Session timer is derived client-side from the active session `started_at` timestamp and an interval tick (see [`nowMs`](frontend/src/features/commands/Board.tsx:58)).
 - Reordering is persisted by sending full per-stage id lists to `POST /api/commands/reorder` (see [`commitReorder()`](frontend/src/features/commands/Board.tsx:112)).
 

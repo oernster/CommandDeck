@@ -55,7 +55,7 @@ def build_installer() -> None:
     if not runtime_exe.exists():
         raise FileNotFoundError(
             f"Could not find runtime EXE at: {runtime_exe}\n"
-            "Run `python buildruntime.py` to build CommandDeck.exe before building the GUI installer."
+            "Run `python buildexe.py` to build CommandDeck.exe before building the GUI installer."
         )
 
     license_file = project_root / "LICENSE"

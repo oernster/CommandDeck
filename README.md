@@ -9,7 +9,7 @@ It is intentionally minimal: one board, one active session, clear stage focus.
 Docs:
 
 - Runtime design and code map: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-- Developer setup / local runs / packaging: [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md)
+- Developer setup / local runs / packaging: [`DEVELOPMENT.md`](DEVELOPMENT.md)
 
 ---
 
@@ -19,7 +19,7 @@ Work is organised into **four fixed stages** (stable internal IDs):
 
 `DESIGN` · `BUILD` · `REVIEW` · `COMPLETE`
 
-The stage *labels* are renameable per board, but the number of stages and ordering remain fixed.
+The stage *labels* are renameable per board; the number of stages and ordering remain fixed.
 
 ---
 
@@ -74,7 +74,7 @@ The active stage is visually dominant; inactive stages dim slightly.
 
 Command Deck is local-first and uses a simple SQLite database for persistence.
 
-Details (locations, overrides, runtime behavior) are documented in [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md).
+Details (locations, overrides, runtime behavior) are documented in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ---
 

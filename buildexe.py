@@ -83,9 +83,9 @@ def build_runtime() -> None:
             "Run `python buildicon.py` to generate it."
         )
 
-    print(f"[buildruntime] Building runtime for {APP_NAME}")
-    print(f"[buildruntime] Runtime entry script: {runtime_entry}")
-    print(f"[buildruntime] Icon: {icon_path}")
+    print(f"[buildexe] Building runtime for {APP_NAME}")
+    print(f"[buildexe] Runtime entry script: {runtime_entry}")
+    print(f"[buildexe] Icon: {icon_path}")
 
     cpu_count = os.cpu_count() or 1
     jobs = str(cpu_count)
@@ -97,14 +97,14 @@ def build_runtime() -> None:
         "on",
     }
     console_mode = "attach" if debug_console else "disable"
-    print(f"[buildruntime] Windows console mode: {console_mode}")
+    print(f"[buildexe] Windows console mode: {console_mode}")
 
     nuitka_args: List[str] = [
         python_exe,
         "-m",
         "nuitka",
         "--onefile",
-        # Runtime does not use Qt directly, but the repo already depends on
+        # Runtime does not use Qt directly; the repo already depends on
         # PySide6 for the installer and icon tooling. Keeping the plugin enabled
         # is harmless and matches our existing ED-style packaging approach.
         "--enable-plugin=pyside6",
@@ -146,7 +146,7 @@ def build_runtime() -> None:
     # Finally, the script to compile.
     nuitka_args.append(str(runtime_entry))
 
-    print("[buildruntime] Running Nuitka with args:")
+    print("[buildexe] Running Nuitka with args:")
     for part in nuitka_args:
         print("  ", part)
 
@@ -160,9 +160,9 @@ def build_runtime() -> None:
 
     dist_path = project_root / f"{RUNTIME_EXE_NAME}.exe"
     if dist_path.exists():
-        print(f"[buildruntime] Runtime build complete: {dist_path}")
+        print(f"[buildexe] Runtime build complete: {dist_path}")
     else:
-        print(f"[buildruntime] Build finished but {dist_path} not found.")
+        print(f"[buildexe] Build finished but {dist_path} not found.")
 
 
 def main() -> int:
@@ -170,7 +170,7 @@ def main() -> int:
         build_runtime()
         return 0
     except Exception as exc:  # noqa: BLE001
-        print(f"[buildruntime] ERROR: {exc}", file=sys.stderr)
+        print(f"[buildexe] ERROR: {exc}", file=sys.stderr)
         return 1
 
 
