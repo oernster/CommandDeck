@@ -449,7 +449,7 @@ export function Board() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [startMode]);
 
-  function openCreate(_stage_id: StageId): void {
+  function openCreate(): void {
     // UX rule: new tasks always default to DESIGN.
     // If the user is in Start mode, opening the Create modal should cancel it;
     // otherwise the Start button becomes a confusing toggle (Start -> Add ->
@@ -591,7 +591,7 @@ export function Board() {
   }
 
   function titlePencilSvg() {
-    // Reuse the same pencil, but allow separate styling if needed.
+    // Reuse the same pencil while allowing separate styling if needed.
     return pencilSvg();
   }
 
@@ -1054,7 +1054,7 @@ export function Board() {
                   type="button"
                   className={styles.opButton}
                   title="Add a task"
-                  onClick={() => openCreate(effectiveFocusedStageId)}
+                  onClick={openCreate}
                 >
                   <span className={styles.opIcon} aria-hidden="true">
                     +
@@ -1079,7 +1079,7 @@ export function Board() {
                   type="button"
                   className={styles.opButton}
                   title={`Add a task in ${stageLabels[effectiveFocusedStageId]}`}
-                  onClick={() => openCreate(effectiveFocusedStageId)}
+                  onClick={openCreate}
                 >
                   <span className={styles.opIcon} aria-hidden="true">
                     +
@@ -1142,7 +1142,7 @@ export function Board() {
           </div>
         </div>
 
-        {/* Row 2 — structural controls (left/right split) */}
+        {/* Row 2: structural controls (left/right split) */}
         <div className={styles.structuralRow}>
           <button
             type="button"

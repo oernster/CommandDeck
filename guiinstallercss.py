@@ -54,7 +54,7 @@ QPushButton#uninstallButton {
     border: none;
 }
 
-/* Theme toggle emoji buttons (header) – shared dark background */
+/* Theme toggle emoji buttons (header): shared dark background */
 QPushButton#lightThemeButton,
 QPushButton#darkThemeButton {
     border-radius: 16px;
@@ -275,7 +275,7 @@ QPushButton#uninstallButton {
     border: none;
 }
 
-/* Theme toggle emoji buttons (header) – light mauve background in light mode */
+/* Theme toggle emoji buttons (header): light mauve background in light mode */
 QPushButton#lightThemeButton,
 QPushButton#darkThemeButton {
     border-radius: 16px;
