@@ -8,8 +8,10 @@ Mirrors the EDColonisationAsst build philosophy:
 - Explicit bundling of runtime EXE used by shortcuts: CommandDeck.exe
 
 Versioning:
-- Single source of truth is backend/app/version.py
-- We do not create or bundle a top-level VERSION file.
+- Single source of truth is the repository-root VERSION file, read through
+  read_version() from buildexe.py.
+- VERSION is shipped at the root of the payload, where the installer and the
+  installed backend both read it.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ import sys
 from pathlib import Path
 from typing import List
 
+from buildexe import VERSION_FILENAME, read_version
 from iconutil import ensure_windows_ico
 
 APP_NAME = "Command Deck"
@@ -31,6 +34,7 @@ RUNTIME_EXE = "CommandDeck.exe"
 
 def build_installer() -> None:
     project_root = Path(__file__).resolve().parent
+    version = read_version(project_root)
 
     gui_script = project_root / "guiinstaller.py"
     if not gui_script.exists():
@@ -65,7 +69,7 @@ def build_installer() -> None:
 
     payload_src = _ensure_payload_dir(project_root)
 
-    print(f"[buildguiinstaller] Building installer for {APP_NAME}")
+    print(f"[buildguiinstaller] Building installer for {APP_NAME} {version}")
     print(f"[buildguiinstaller] GUI script: {gui_script}")
     print(f"[buildguiinstaller] Icon: {icon_path}")
     print(f"[buildguiinstaller] Embedding payload from: {payload_src}")
@@ -176,6 +180,7 @@ def _ensure_payload_dir(project_root: Path) -> Path:
         f"{APP_ID}.ico",
         "LICENSE",
         RUNTIME_EXE,
+        VERSION_FILENAME,
     ]
 
     curated_dirs = [

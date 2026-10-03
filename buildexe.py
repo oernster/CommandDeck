@@ -21,6 +21,23 @@ from typing import List
 APP_NAME = "Command Deck"
 APP_ID = "CommandDeck"
 RUNTIME_EXE_NAME = "CommandDeck"
+VERSION_FILENAME = "VERSION"
+
+
+def read_version(project_root: Path) -> str:
+    """Return the version held in the repository-root VERSION file.
+
+    VERSION is the single source of truth. A build without it would ship an
+    application that reports the dev fallback, so a missing or empty file
+    stops the build.
+    """
+    version_file = project_root / VERSION_FILENAME
+    if not version_file.is_file():
+        raise FileNotFoundError(f"Could not find {VERSION_FILENAME} at: {version_file}")
+    version = version_file.read_text(encoding="utf-8").strip()
+    if not version:
+        raise ValueError(f"{version_file} is empty")
+    return version
 
 
 def _ensure_frontend_dist_built(project_root: Path) -> None:
@@ -83,7 +100,9 @@ def build_runtime() -> None:
             "Run `python buildicon.py` to generate it."
         )
 
-    print(f"[buildexe] Building runtime for {APP_NAME}")
+    version = read_version(project_root)
+
+    print(f"[buildexe] Building runtime for {APP_NAME} {version}")
     print(f"[buildexe] Runtime entry script: {runtime_entry}")
     print(f"[buildexe] Icon: {icon_path}")
 
@@ -136,6 +155,11 @@ def build_runtime() -> None:
     # Bundle the icon file so the runtime can use it for the tray icon even if
     # the installed payload copy goes missing.
     nuitka_args.append(f"--include-data-file={icon_path}={APP_ID}.ico")
+
+    # Bundle VERSION beside the compiled `app` package; app/version.py reads it
+    # from there at runtime.
+    version_file = project_root / VERSION_FILENAME
+    nuitka_args.append(f"--include-data-file={version_file}={VERSION_FILENAME}")
 
     # Include the production frontend build so the runtime can self-heal if the
     # installer payload copy is missing.

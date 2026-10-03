@@ -1,5 +1,3 @@
 # frontend/tests
 
-Frontend tests are not part of the backend 100% coverage gate.
-This directory exists to match the structure in [`STANDARDS.md`](../../STANDARDS.md:1).
-
+The frontend has no tests; this directory holds none. The backend's 100% coverage gate covers the backend application only (see [`TESTING.md`](../../TESTING.md)).

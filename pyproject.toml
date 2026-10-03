@@ -1,3 +1,10 @@
+[project]
+name = "command-deck"
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
 [tool.black]
 line-length = 88
 target-version = ["py311"]

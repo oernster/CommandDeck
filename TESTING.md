@@ -21,8 +21,8 @@ the coverage measurement over the backend application and the 100% floor, by
 line AND branch. mypy runs in strict mode, set in `pyproject.toml`. There is no
 CI, so run all four and read the exit code of each.
 
-**All four pass.** Measured on 2026-10-02: black and flake8 clean, mypy clean
-in strict mode over 35 files, 181 tests passed at 100% line and branch
+**All four pass.** Measured on 2026-10-03: black and flake8 clean, mypy clean
+in strict mode over 35 files, 186 tests passed at 100% line and branch
 coverage in 20 seconds on Windows.
 
 **Read the exit code, never the text.** The run prints the coverage table then
@@ -43,8 +43,8 @@ through FastAPI's `dependency_overrides`, so requests made through the
 `TestClient` reach that file and nothing else.
 
 - **Your database is never written.** A run from source keeps its database at
-  `%LOCALAPPDATA%\CommandDeck\command_deck.db`; measured on 2026-10-02, a full
-  run left it untouched.
+  `%LOCALAPPDATA%\CommandDeck\command_deck.db`; measured on 2026-10-03, three
+  full runs left its modification time unchanged.
 - **The frontend has no tests.** `frontend/` carries a lint script
   (`npm run lint`, eslint) and the TypeScript compile that `npm run build`
   runs; no test runner.
@@ -63,6 +63,7 @@ All files sit flat in `backend/tests/`:
 | `test_static_serving.py` | serving the production frontend build from the backend |
 | `test_runtime_paths.py`, `test_tray_runtime.py` | where the packaged runtime keeps its files; the tray |
 | `test_installer_uninstall_preserves_db.py` | the installer keeping the database on uninstall |
+| `test_version.py` | the version read from `VERSION` by the backend and the installer |
 | `test_coverage_edges.py` | the repositories and services driven directly rather than through the API |
 
 ## Writing a test

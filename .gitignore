@@ -214,3 +214,6 @@ build_payload/
 runtime_entry.dist/
 _debug*
 *.exe
+
+# release notes (drafted per release, never committed)
+NOTES.md

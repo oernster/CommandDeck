@@ -6,7 +6,7 @@ User-facing overview lives in [`README.md`](README.md). Runtime architecture and
 
 ---
 
-## Runtime addresses (v1)
+## Runtime addresses
 
 - Backend API: `http://127.0.0.1:8001`
 - Frontend dev server: `http://127.0.0.1:5173`
@@ -82,7 +82,7 @@ Then open:
 
 - `http://127.0.0.1:8001/`
 
-Static serving behavior is implemented in [`create_app()`](backend/app/main.py:32) and the dist-path resolution in [`frontend_dist_dir()`](backend/app/core/static_files.py:27).
+Static serving behaviour is implemented in [`create_app()`](backend/app/main.py:32) and the dist-path resolution in [`frontend_dist_dir()`](backend/app/core/static_files.py:29).
 
 ---
 
@@ -101,7 +101,7 @@ Override:
 
 Related runtime/testing variable:
 
-- `COMMANDDECK_FRONTEND_DIST_DIR`: override the production frontend dist directory used for static serving (primarily for tests). See [`frontend_dist_dir()`](backend/app/core/static_files.py:27).
+- `COMMANDDECK_FRONTEND_DIST_DIR`: override the production frontend dist directory used for static serving (primarily for tests). See [`frontend_dist_dir()`](backend/app/core/static_files.py:29).
 
 ---
 
@@ -144,13 +144,20 @@ python -m app.tray
 
 Command Deck ships a self-contained Windows runtime executable and a GUI installer, both built with Nuitka.
 
-Single source of truth for versioning:
+### Versioning
 
-- [`VERSION`](backend/app/version.py:1) in `backend/app/version.py`
+The repository-root [`VERSION`](VERSION) file is the single source of truth: one line holding the version and nothing else. Every consumer reads it rather than keeping a copy:
+
+- the backend, through [`backend/app/version.py`](backend/app/version.py:1), which falls back to `0.0.0-dev` when no VERSION file can be read;
+- the installer, through [`get_backend_version()`](guiinstaller.py:83), for its subtitle line, its prompts and the Add/Remove Programs entry;
+- the build scripts, through [`read_version()`](buildexe.py:27), which stops the build when VERSION is missing or empty;
+- `pyproject.toml`, whose version is dynamic and read from the same file.
+
+To release a new version, change VERSION alone.
 
 ### Build-time environment variables
 
-- `COMMANDDECK_DEBUG_CONSOLE`: when truthy (`1/true/yes/on`), the runtime build uses an attached console window. See [`build_runtime()`](buildexe.py:62).
+- `COMMANDDECK_DEBUG_CONSOLE`: when truthy (`1/true/yes/on`), the runtime build uses an attached console window. See [`build_runtime()`](buildexe.py:79).
 
 ### 1) One-time environment setup
 
@@ -205,13 +212,16 @@ Output:
 
 - `CommandDeckInstaller.exe`
 
-The installer bundles a curated payload directory, including:
+The installer bundles a curated payload directory, copied into the install directory on Install and Repair:
 
 - `CommandDeck.exe`
-- `backend/` (payload)
-- `frontend/` including `frontend/dist` production build
+- `CommandDeck.ico`
 - [`LICENSE`](LICENSE)
-- [`INSTALLER_LICENSE`](INSTALLER_LICENSE)
+- [`VERSION`](VERSION)
+- `backend/` (sources only: no tests, caches or database)
+- `frontend/` including the `frontend/dist` production build
+
+Alongside the payload the installer also embeds [`LICENSE`](LICENSE) and [`INSTALLER_LICENSE`](INSTALLER_LICENSE), which it shows in its About dialog.
 
 ---
 
@@ -225,7 +235,7 @@ Installer behavior:
 
 - **Repair**: never touches the database.
 - **Uninstall**: preserves the database by default.
-  - To wipe user data, use the **"On uninstall, also delete my database"** checkbox.
+  - To wipe user data, tick **"On uninstall, also delete my database (wipe user data)"**.
 
 ---
 

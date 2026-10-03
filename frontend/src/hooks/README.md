@@ -1,4 +1,3 @@
 # frontend/src/hooks
 
-Reusable React hooks that are not feature-specific.
-
+Reserved for reusable React hooks that are not feature-specific. It holds none.

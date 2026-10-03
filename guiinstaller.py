@@ -53,6 +53,8 @@ APP_NAME = "Command Deck"
 APP_ID = "CommandDeck"  # No spaces: used for paths/registry (ED installer pattern)
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_PAYLOAD_DIR = PROJECT_ROOT / "build_payload"
+VERSION_FILENAME = "VERSION"
+FALLBACK_VERSION = "0.0.0-dev"
 
 # Standard divider used in license/about text so all separator lines are the
 # same length and never wrap onto multiple lines.
@@ -66,7 +68,7 @@ INSTALLER_EXE_NAME = "CommandDeckInstaller.exe"
 # User data files stored alongside the runtime EXE.
 #
 # IMPORTANT:
-# - These must survive Repair, and must survive Uninstall by default.
+# - These must survive Repair; they must also survive Uninstall by default.
 # - When SQLite is in WAL mode there may also be `-wal` / `-shm` sidecar files.
 SQLITE_DB_FILENAME = "command_deck.db"
 
@@ -81,55 +83,37 @@ WINDOWS_RUN_VALUE_NAME = APP_ID
 def get_backend_version() -> str:
     """Determine the installer version.
 
-    Single source of truth: backend/app/version.py.
+    Single source of truth: the repository-root VERSION file, which the build
+    ships at the root of the installer payload.
     """
-
-    def _parse_version_py(path: Path) -> Optional[str]:
-        if not path.exists():
-            return None
-        try:
-            text = path.read_text(encoding="utf-8")
-        except Exception:
-            return None
-        for line in text.splitlines():
-            s = line.strip()
-            if s.startswith("VERSION") and "=" in s:
-                _, rhs = s.split("=", 1)
-                raw = rhs.strip().strip('"').strip("'")
-                return raw or None
-        return None
 
     candidates: list[Path] = []
 
-    # Packaged installer bundle: payload backend sources may be included and
-    # may have been renamed to *.py_.
+    # Packaged installer bundle: VERSION sits at the root of the payload.
     try:
         here = Path(__file__).resolve().parent
-        candidates.append(here / "payload" / "backend" / "app" / "version.py")
-        candidates.append(here / "payload" / "backend" / "app" / "version.py_")
+        candidates.append(here / "payload" / VERSION_FILENAME)
     except Exception:
         pass
 
     try:
         exe_dir = Path(sys.argv[0]).resolve().parent
-        candidates.append(exe_dir / "payload" / "backend" / "app" / "version.py")
-        candidates.append(exe_dir / "payload" / "backend" / "app" / "version.py_")
+        candidates.append(exe_dir / "payload" / VERSION_FILENAME)
     except Exception:
         pass
 
     # Source/dev checkout.
-    candidates.append(PROJECT_ROOT / "backend" / "app" / "version.py")
+    candidates.append(PROJECT_ROOT / VERSION_FILENAME)
 
-    seen: set[Path] = set()
     for path in candidates:
-        if path in seen:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
             continue
-        seen.add(path)
-        v = _parse_version_py(path)
-        if v:
-            return v
+        if text:
+            return text
 
-    return "0.0.0"
+    return FALLBACK_VERSION
 
 
 def get_default_install_dir() -> Path:
@@ -1180,8 +1164,8 @@ class InstallerWindow(QMainWindow):
 
         target = runtime_exe
         # Use the EXE itself as the icon source. This is the most reliable
-        # option for Windows Shell (Start menu + Desktop), and avoids failures
-        # caused by malformed/odd-sized .ico files.
+        # option for Windows Shell (Start menu + Desktop); it also avoids
+        # failures caused by malformed/odd-sized .ico files.
         icon = runtime_exe
 
         desktop_shortcut, start_menu_shortcut = self._windows_shortcut_paths()
